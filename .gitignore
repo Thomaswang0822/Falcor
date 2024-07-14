@@ -18,6 +18,10 @@
 
 # User files.
 /CMakeUserPresets.json
+/CMakeFiles
+/git_version
+/git_version_state
+/CMakeCache.txt
 
 # File types.
 *.user
