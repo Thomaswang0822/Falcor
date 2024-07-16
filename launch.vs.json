@@ -1,0 +1,17 @@
+// put this under ${workspaceRoot}/.vs AND remove comments
+{
+    "version": "0.2.1",
+    "defaults": {},
+    "configurations": [
+        {
+            "type": "node",
+            "project": "CMakeLists.txt",
+            "projectTarget": "Mogwai.exe (bin\\Debug\\Mogwai.exe)",
+            "name": "RTXDI Arcade",
+            "args": [
+                "--script=${workspaceRoot}\\scripts\\RTXDI.py",
+                "--scene=${workspaceRoot}\\media\\Arcade\\Arcade.pyscene"
+            ]
+        }
+    ]
+}
