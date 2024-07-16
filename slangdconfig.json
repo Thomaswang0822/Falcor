@@ -1,0 +1,12 @@
+// Let Slang VS Extension + Intellisense to understand code
+
+{
+    // Their actual values are passed in from scene definition at runtime
+    "slang.predefinedMacros": [
+        "USE_ENV_BACKGROUND=1"
+    ],
+    "slang.additionalSearchPaths": [
+        "Source/Falcor"
+    ],
+    "slang.enableCommitCharactersInAutoCompletion": "on"
+}
