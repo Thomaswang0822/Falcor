@@ -1,0 +1,28 @@
+add_plugin(ReSTIRPT)
+
+target_sources(ReSTIRPT PRIVATE
+    ComputePathReuseMISWeights.cs.slang
+    GeneratePaths.cs.slang
+    LoadShadingData.slang
+    NRDHelpers.slang
+    Params.slang
+    PathBuilder.slang
+    PathReservoir.slang
+    PathState.slang
+    PathTracer.slang
+    ReflectTypes.cs.slang
+    ReSTIRPTPass.cpp
+    ReSTIRPTPass.filters
+    ReSTIRPTPass.h
+    Shift.slang
+    SpatialPathRetrace.cs.slang
+    SpatialReuse.cs.slang
+    StaticParams.slang
+    TemporalPathRetrace.cs.slang
+    TemporalReuse.cs.slang
+    TracePass.cs.slang
+)
+
+target_copy_shaders(ReSTIRPT RenderPasses/ReSTIRPT)
+
+target_source_group(ReSTIRPT "RenderPasses")
