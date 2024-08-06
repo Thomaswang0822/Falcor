@@ -1,6 +1,6 @@
-add_plugin(ReSTIRPT)
+add_plugin(ReSTIRPTPass)
 
-target_sources(ReSTIRPT PRIVATE
+target_sources(ReSTIRPTPass PRIVATE
     ComputePathReuseMISWeights.cs.slang
     GeneratePaths.cs.slang
     LoadShadingData.slang
@@ -23,6 +23,6 @@ target_sources(ReSTIRPT PRIVATE
     TracePass.cs.slang
 )
 
-target_copy_shaders(ReSTIRPT RenderPasses/ReSTIRPT)
+target_copy_shaders(ReSTIRPTPass RenderPasses/ReSTIRPTPass)
 
-target_source_group(ReSTIRPT "RenderPasses")
+target_source_group(ReSTIRPTPass "RenderPasses")

@@ -34,4 +34,5 @@
 *.mp4
 *.tlog
 *.bak
-/Source/RenderPasses/ReSTIRPT/Data
+
+/Source/RenderPasses/ReSTIRPTPass/Data
