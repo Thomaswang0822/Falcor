@@ -296,6 +296,29 @@ target_sources(Falcor PRIVATE
     Rendering/RTXDI/RTXDISetup.cs.slang
     Rendering/RTXDI/SurfaceData.slang
 
+    Rendering/ScreenSpaceReSTIR/EvalContext.slang
+    Rendering/ScreenSpaceReSTIR/EvaluateFinalSamples.cs.slang
+    Rendering/ScreenSpaceReSTIR/FinalSample.slang
+    Rendering/ScreenSpaceReSTIR/GenerateLightTiles.cs.slang
+    Rendering/ScreenSpaceReSTIR/GIClearReservoirs.cs.slang
+    Rendering/ScreenSpaceReSTIR/GIResampling.cs.slang
+    Rendering/ScreenSpaceReSTIR/GIReservoir.slang
+    Rendering/ScreenSpaceReSTIR/InitialResampling.cs.slang
+    Rendering/ScreenSpaceReSTIR/Lights.slang
+    Rendering/ScreenSpaceReSTIR/LightSample.slang
+    Rendering/ScreenSpaceReSTIR/LocalEmissiveTriangle.slang
+    Rendering/ScreenSpaceReSTIR/Params.slang
+    Rendering/ScreenSpaceReSTIR/ReflectTypes.cs.slang
+    Rendering/ScreenSpaceReSTIR/Resampling.slang
+    Rendering/ScreenSpaceReSTIR/Reservoir.slang
+    Rendering/ScreenSpaceReSTIR/ScreenSpaceReSTIR.cpp
+    Rendering/ScreenSpaceReSTIR/ScreenSpaceReSTIR.h
+    Rendering/ScreenSpaceReSTIR/ScreenSpaceReSTIR.slang
+    Rendering/ScreenSpaceReSTIR/SpatialResampling.cs.slang
+    Rendering/ScreenSpaceReSTIR/SurfaceData.slang
+    Rendering/ScreenSpaceReSTIR/TemporalResampling.cs.slang
+    Rendering/ScreenSpaceReSTIR/UpdateEmissiveTriangles.cs.slang
+
     Rendering/Utils/PixelStats.cpp
     Rendering/Utils/PixelStats.cs.slang
     Rendering/Utils/PixelStats.h
@@ -821,7 +844,7 @@ target_compile_options(Falcor
             /WX                             # warnings as errors
             /W4                             # increase warning level
             /wd4251                         # 'type' : class 'type1' needs to have dll-interface to be used by clients of class 'type2'
-            /wd4819                         # The file contains a character that cannot be represented in the current code page(936)             
+            /wd4819                         # The file contains a character that cannot be represented in the current code page(936)
             /wd4244                         # 'conversion' conversion from 'type1' to 'type2', possible loss of data
             /wd4267                         # 'var' : conversion from 'size_t' to 'type', possible loss of data
             /wd4100                         # unreferenced formal parameter

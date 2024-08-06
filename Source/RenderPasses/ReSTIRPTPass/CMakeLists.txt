@@ -12,7 +12,6 @@ target_sources(ReSTIRPTPass PRIVATE
     PathTracer.slang
     ReflectTypes.cs.slang
     ReSTIRPTPass.cpp
-    ReSTIRPTPass.filters
     ReSTIRPTPass.h
     Shift.slang
     SpatialPathRetrace.cs.slang

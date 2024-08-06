@@ -3,9 +3,12 @@
 {
     // Their actual values are passed in from scene definition at runtime
     "slang.predefinedMacros": [
-        "USE_ENV_BACKGROUND=1"
+        "USE_ENV_BACKGROUND=1",
+	    "RTXDI_INSTALLED=1"
     ],
     "slang.additionalSearchPaths": [
+        "external/packman/nanovdb/include",
+        "external/packman/rtxdi/rtxdi-sdk/include",
         "Source/Falcor"
     ],
     "slang.enableCommitCharactersInAutoCompletion": "on"
