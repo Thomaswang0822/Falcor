@@ -199,6 +199,61 @@ namespace Falcor
             bool reSTIREnableTemporalJacobian = true;
 
             bool forceClearReservoirs = false;                  ///< Force clear temporal and spatial reservoirs.
+
+            template<typename Archive>
+            void serialize(Archive& ar)
+            {
+                // Common Options for ReSTIR DI and GI
+                ar("useReSTIRDI", useReSTIRDI);
+                ar("useReSTIRGI", useReSTIRGI);
+                ar("normalThreshold", normalThreshold);
+                ar("depthThreshold", depthThreshold);
+
+                // Options for ReSTIR DI only
+                ar("envLightWeight", envLightWeight);
+                ar("emissiveLightWeight", emissiveLightWeight);
+                ar("analyticLightWeight", analyticLightWeight);
+                ar("useEmissiveTextureForSampling", useEmissiveTextureForSampling);
+                ar("useEmissiveTextureForShading", useEmissiveTextureForShading);
+                ar("useLocalEmissiveTriangles", useLocalEmissiveTriangles);
+                ar("lightTileCount", lightTileCount);
+                ar("lightTileSize", lightTileSize);
+                ar("useAlphaTest", useAlphaTest);
+                ar("useInitialVisibility", useInitialVisibility);
+                ar("useFinalVisibility", useFinalVisibility);
+                ar("reuseFinalVisibility", reuseFinalVisibility);
+                ar("screenTileSize", screenTileSize);
+                ar("initialLightSampleCount", initialLightSampleCount);
+                ar("initialBRDFSampleCount", initialBRDFSampleCount);
+                ar("brdfCutoff", brdfCutoff);
+                ar("useTemporalResampling", useTemporalResampling);
+                ar("maxHistoryLength", maxHistoryLength);
+                ar("useSpatialResampling", useSpatialResampling);
+                ar("spatialIterations", spatialIterations);
+                ar("spatialNeighborCount", spatialNeighborCount);
+                ar("spatialGatherRadius", spatialGatherRadius);
+                ar("usePairwiseMIS", usePairwiseMIS);
+                ar("unbiased", unbiased);
+
+                ar("debugOutput", debugOutput);
+                ar("enabled", enabled);
+
+                // Options for ReSTIR GI only
+                ar("reSTIRMode", reSTIRMode);
+                ar("targetPdf", targetPdf);
+                ar("reSTIRGITemporalMaxSamples", reSTIRGITemporalMaxSamples);
+                ar("reSTIRGISpatialMaxSamples", reSTIRGISpatialMaxSamples);
+                ar("reSTIRGIReservoirCount", reSTIRGIReservoirCount);
+                ar("reSTIRGIUseReSTIRN", reSTIRGIUseReSTIRN);
+                ar("reSTIRGIMaxSampleAge", reSTIRGIMaxSampleAge);
+                ar("diffuseThreshold", diffuseThreshold);
+                ar("reSTIRGISpatialWeightClampThreshold", reSTIRGISpatialWeightClampThreshold);
+                ar("reSTIRGIEnableSpatialWeightClamping", reSTIRGIEnableSpatialWeightClamping);
+                ar("reSTIRGIJacobianClampTreshold", reSTIRGIJacobianClampTreshold);
+                ar("reSTIRGIEnableJacobianClamping", reSTIRGIEnableJacobianClamping);
+                ar("reSTIREnableTemporalJacobian", reSTIREnableTemporalJacobian);
+                ar("forceClearReservoirs", forceClearReservoirs);
+            }
         };
 
         static_assert(std::is_trivially_copyable<Options>(), "Options needs to be trivially copyable");
@@ -215,6 +270,19 @@ namespace Falcor
         */
         //static SharedPtr create(const Scene::SharedPtr& pScene, const Options::SharedPtr& options, int numReSTIRInstances = 1, int ReSTIRInstanceID=0);
 
+        /** Set the configuration.
+        */
+        void setOptions(const Options& options);
+
+        /** Returns the current configuration.
+        */
+        const Options& getOptions() const { return mOptions; }
+
+        /** Render the GUI.
+            \return True if options were changed, false otherwise.
+        */
+        bool renderUI(Gui::Widgets& widget);
+
         /** Get a list of shader defines for using the ReSTIR sampler.
             \return Returns a list of defines.
         */
@@ -223,20 +291,7 @@ namespace Falcor
         /** Bind the ReSTIR sampler to a given shader var.
             \param[in] var The shader variable to set the data into.
         */
-        void setShaderData(const ShaderVar& var) const;
-
-        /** Render the GUI.
-            \return True if options were changed, false otherwise.
-        */
-        bool renderUI(Gui::Widgets& widget);
-
-        /** Returns the current configuration.
-        */
-        const Options& getOptions() const { return mOptions; }
-
-        /** Set the configuration.
-        */
-        void setOptions(const Options& options);
+        void bindShaderData(const ShaderVar& var) const;
 
         /** Begin a frame.
             Must be called once at the beginning of each frame.
@@ -279,7 +334,7 @@ namespace Falcor
 
         /** Register script bindings.
         */
-        static void scriptBindings(pybind11::module& m);
+        //static void scriptBindings(pybind11::module& m);
 
         void enablePass(bool enabled);
 
@@ -324,6 +379,7 @@ namespace Falcor
         ref<Texture> createNeighborOffsetTexture(uint32_t sampleCount);
 
         ref<Scene> mpScene;                                 ///< Scene.
+        ref<Device> mpDevice;                               ///< GPU device.
         Options    mOptions;                                ///< Configuration options.
         std::mt19937 mRng;                                  ///< Random generator.
 
@@ -335,7 +391,7 @@ namespace Falcor
         uint32_t mReSTIRInstanceIndex = 0;                  ///< The index of the ReSTIR instance, used as initial mFrameIndex
         uint32_t mNumReSTIRInstances = 1;                   ///< Number of ReSTIR instances that are executed together
 
-         ref<ComputePass> mpReflectTypes;                   ///< Pass for reflecting types.
+        ref<ComputePass> mpReflectTypes;                   ///< Pass for reflecting types.
 
         // ReSTIR DI passes.
         ref<ComputePass> mpUpdateEmissiveTriangles;         ///< Pass for updating the local emissive triangle data.

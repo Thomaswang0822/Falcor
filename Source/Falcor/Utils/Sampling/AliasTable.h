@@ -37,7 +37,7 @@ namespace Falcor
 /**
  * Implements the alias method for sampling from a discrete probability distribution.
  */
-class FALCOR_API AliasTable
+class FALCOR_API AliasTable : public Object
 {
 public:
     /**

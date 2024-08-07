@@ -7,6 +7,15 @@
  # distribution of this software and related documentation without an express
  # license agreement from NVIDIA CORPORATION is strictly prohibited.
  **************************************************************************/
+
+/// A non-trivial update, see Scene::bindShaderData() and ShaderVar::operator=()
+/**
+Bind the scene to a given shader var.
+    Note that the scene may change between calls to update().
+    The caller should rebind the scene data before executing any program that accesses the scene.
+*/
+/// void bindShaderData(const ShaderVar& var) const { var = mpSceneBlock; }
+
 #include "ScreenSpaceReSTIR.h"
 #include "Utils/Color/ColorHelpers.slang"
 
@@ -14,17 +23,18 @@ namespace Falcor
 {
     namespace
     {
-        const char kReflectTypesFile[] = "Experimental/ScreenSpaceReSTIR/ReflectTypes.cs.slang";
-        const char kUpdateEmissiveTriangles[] = "Experimental/ScreenSpaceReSTIR/UpdateEmissiveTriangles.cs.slang";
-        const char kGenerateLightTilesFile[] = "Experimental/ScreenSpaceReSTIR/GenerateLightTiles.cs.slang";
-        const char kInitialResamplingFile[] = "Experimental/ScreenSpaceReSTIR/InitialResampling.cs.slang";
-        const char kTemporalResamplingFile[] = "Experimental/ScreenSpaceReSTIR/TemporalResampling.cs.slang";
-        const char kSpatialResamplingFile[] = "Experimental/ScreenSpaceReSTIR/SpatialResampling.cs.slang";
-        const char kEvaluateFinalSamplesFile[] = "Experimental/ScreenSpaceReSTIR/EvaluateFinalSamples.cs.slang";
-        const char kGIResamplingFile[] = "Experimental/ScreenSpaceReSTIR/GIResampling.cs.slang";
-        const char kGIClearReservoirsFile[] = "Experimental/ScreenSpaceReSTIR/GIClearReservoirs.cs.slang";
+        // Shader location
+        const std::string kReflectTypesFile = "Rendering/ScreenSpaceReSTIR/ReflectTypes.cs.slang";
+        const std::string kUpdateEmissiveTriangles = "Rendering/ScreenSpaceReSTIR/UpdateEmissiveTriangles.cs.slang";
+        const std::string kGenerateLightTilesFile = "Rendering/ScreenSpaceReSTIR/GenerateLightTiles.cs.slang";
+        const std::string kInitialResamplingFile = "Rendering/ScreenSpaceReSTIR/InitialResampling.cs.slang";
+        const std::string kTemporalResamplingFile = "Rendering/ScreenSpaceReSTIR/TemporalResampling.cs.slang";
+        const std::string kSpatialResamplingFile = "Rendering/ScreenSpaceReSTIR/SpatialResampling.cs.slang";
+        const std::string kEvaluateFinalSamplesFile = "Rendering/ScreenSpaceReSTIR/EvaluateFinalSamples.cs.slang";
+        const std::string kGIResamplingFile = "Rendering/ScreenSpaceReSTIR/GIResampling.cs.slang";
+        const std::string kGIClearReservoirsFile = "Rendering/ScreenSpaceReSTIR/GIClearReservoirs.cs.slang";
 
-        const std::string kShaderModel = "6_5";
+        const ShaderModel kShaderModel = ShaderModel::SM6_5;
 
         const Gui::DropdownList kDebugOutputList =
         {
@@ -68,46 +78,56 @@ namespace Falcor
         const uint32_t kNeighborOffsetCount = 8192;
     }
 
-    ScreenSpaceReSTIR::SharedPtr ScreenSpaceReSTIR::create(const Scene::SharedPtr& pScene, const Options::SharedPtr& options, int numReSTIRInstances, int ReSTIRInstanceID)
+    /*ScreenSpaceReSTIR::SharedPtr ScreenSpaceReSTIR::create(const Scene::SharedPtr& pScene, const Options::SharedPtr& options, int numReSTIRInstances, int ReSTIRInstanceID)
     {
         return SharedPtr(new ScreenSpaceReSTIR(pScene, options, numReSTIRInstances, ReSTIRInstanceID));
-    }
+    }*/
 
-    ScreenSpaceReSTIR::ScreenSpaceReSTIR(const Scene::SharedPtr& pScene, const Options::SharedPtr& options, int numReSTIRInstances, int ReSTIRInstanceID)
+    ScreenSpaceReSTIR::ScreenSpaceReSTIR(
+        const ref<Scene>& pScene,
+        const Options& options,
+        int numReSTIRInstances,
+        int ReSTIRInstanceID
+    )
         : mpScene(pScene)
+        , mpDevice(mpScene->getDevice())
         , mOptions(options)
     {
-        assert(mpScene);
+        if (!mpDevice->isShaderModelSupported(ShaderModel::SM6_5))
+            FALCOR_THROW("ScreenSpaceReSTIR requires Shader Model 6.5 support.");
 
-        mpPixelDebug = PixelDebug::create();
+        mpPixelDebug = std::make_unique<PixelDebug>(mpDevice);
 
-        // Create compute pass for reflecting data types.
-        Program::Desc desc;
-        Program::DefineList defines;
-        defines.add(mpScene->getSceneDefines());
-        defines.add(getLightsDefines());
-        desc.addShaderLibrary(kReflectTypesFile).csEntry("main").setShaderModel(kShaderModel);
-        mpReflectTypes = ComputePass::create(desc, defines);
+        FALCOR_ASSERT(pScene);
+        setOptions(options);
 
-        // Create neighbor offset texture.
-        mpNeighborOffsets = createNeighborOffsetTexture(kNeighborOffsetCount);
+        //// Create compute pass for reflecting data types.
+        //Desc desc;
+        //DefineList defines;
+        //defines.add(mpScene->getSceneDefines());
+        //defines.add(getLightsDefines());
+        //desc.addShaderLibrary(kReflectTypesFile).csEntry("main").setShaderModel(kShaderModel);
+        //mpReflectTypes = ComputePass::create(desc, defines);
 
-        mNumReSTIRInstances = numReSTIRInstances;
-        mReSTIRInstanceIndex = ReSTIRInstanceID;
-        mFrameIndex = mReSTIRInstanceIndex;
+        //// Create neighbor offset texture.
+        //mpNeighborOffsets = createNeighborOffsetTexture(kNeighborOffsetCount);
+
+        //mNumReSTIRInstances = numReSTIRInstances;
+        //mReSTIRInstanceIndex = ReSTIRInstanceID;
+        //mFrameIndex = mReSTIRInstanceIndex;
     }
 
-    Program::DefineList ScreenSpaceReSTIR::getDefines() const
+    DefineList ScreenSpaceReSTIR::getDefines() const
     {
-        Program::DefineList defines;
-        defines.add("SCREEN_SPACE_RESTIR_USE_DI", mOptions->useReSTIRDI ? "1" : "0");
-        defines.add("SCREEN_SPACE_RESTIR_USE_GI", mOptions->useReSTIRGI ? "1" : "0");
-        defines.add("SCREEN_SPACE_RESTIR_GI_DIFFUSE_THRESHOLD", std::to_string(mOptions->diffuseThreshold));
-        defines.add("RESTIR_GI_USE_RESTIR_N", mOptions->reSTIRGIUseReSTIRN ? "1" : "0");
+        DefineList defines;
+        defines.add("SCREEN_SPACE_RESTIR_USE_DI", mOptions.useReSTIRDI ? "1" : "0");
+        defines.add("SCREEN_SPACE_RESTIR_USE_GI", mOptions.useReSTIRGI ? "1" : "0");
+        defines.add("SCREEN_SPACE_RESTIR_GI_DIFFUSE_THRESHOLD", std::to_string(mOptions.diffuseThreshold));
+        defines.add("RESTIR_GI_USE_RESTIR_N", mOptions.reSTIRGIUseReSTIRN ? "1" : "0");
         return defines;
     }
 
-    void ScreenSpaceReSTIR::setShaderData(const ShaderVar& var) const
+    void ScreenSpaceReSTIR::bindShaderData(const ShaderVar& var) const
     {
         var["surfaceData"] = mpSurfaceData;
         var["normalDepth"] = mpNormalDepthTexture;
@@ -122,12 +142,19 @@ namespace Falcor
         var["prevReservoirs"] = mpGIReservoirs[((mFrameIndex - mReSTIRInstanceIndex) / mNumReSTIRInstances + 0) % 2];
         var["reservoirs"] = mpGIReservoirs[((mFrameIndex - mReSTIRInstanceIndex) / mNumReSTIRInstances + 1) % 2];
 
-        var["giReservoirCount"] = mOptions->reSTIRGIReservoirCount;
+        var["giReservoirCount"] = mOptions.reSTIRGIReservoirCount;
     }
 
     void ScreenSpaceReSTIR::enablePass(bool enabled)
     {
-        mOptions->enabled = enabled;
+        mOptions.enabled = enabled;
+    }
+
+    void ScreenSpaceReSTIR::setOptions(const Options& options)
+    {
+        Options newOptions = options;
+
+        mOptions = newOptions;
     }
 
     bool ScreenSpaceReSTIR::renderUI(Gui::Widgets& widget)
@@ -136,27 +163,27 @@ namespace Falcor
 
         bool dirty = false;
 
-        dirty = widget.checkbox("Enable Pass", mOptions->enabled);
+        dirty = widget.checkbox("Enable Pass", mOptions.enabled);
 
-        mRecompile |= widget.checkbox("Use ReSTIR DI", mOptions->useReSTIRDI);
+        mRecompile |= widget.checkbox("Use ReSTIR DI", mOptions.useReSTIRDI);
         widget.tooltip("Enable ReSTIR for direct illumination.");
 
-        mRecompile |= widget.checkbox("Use ReSTIR GI", mOptions->useReSTIRGI);
+        mRecompile |= widget.checkbox("Use ReSTIR GI", mOptions.useReSTIRGI);
         widget.tooltip("Enable ReSTIR for indirect illumination.");
 
         if (auto group = widget.group("Debugging"))
         {
-            mRecompile |= group.dropdown("Debug output", kDebugOutputList, reinterpret_cast<uint32_t&>(mOptions->debugOutput));
+            mRecompile |= group.dropdown("Debug output", kDebugOutputList, reinterpret_cast<uint32_t&>(mOptions.debugOutput));
             mpPixelDebug->renderUI(group);
 
         }
 
         if (auto group = widget.group("Common options"))
         {
-            dirty |= widget.var("Normal threshold", mOptions->normalThreshold, 0.f, 1.f);
+            dirty |= widget.var("Normal threshold", mOptions.normalThreshold, 0.f, 1.f);
             widget.tooltip("Normal cosine threshold for reusing temporal samples or spatial neighbor samples.");
 
-            dirty |= widget.var("Depth threshold", mOptions->depthThreshold, 0.f, 1.f);
+            dirty |= widget.var("Depth threshold", mOptions.depthThreshold, 0.f, 1.f);
             widget.tooltip("Relative depth threshold for reusing temporal samples or spatial neighbor samples.");
         }
 
@@ -164,131 +191,131 @@ namespace Falcor
         {
             if (auto group = widget.group("Light selection weights"))
             {
-                mRecompile |= group.var("Environment", mOptions->envLightWeight, 0.f, 1.f);
+                mRecompile |= group.var("Environment", mOptions.envLightWeight, 0.f, 1.f);
                 group.tooltip("Relative weight for selecting the env map when sampling a light.");
 
-                mRecompile |= group.var("Emissive", mOptions->emissiveLightWeight, 0.f, 1.f);
+                mRecompile |= group.var("Emissive", mOptions.emissiveLightWeight, 0.f, 1.f);
                 group.tooltip("Relative weight for selecting an emissive light when sampling a light.");
 
-                mRecompile |= group.var("Analytic", mOptions->analyticLightWeight, 0.f, 1.f);
+                mRecompile |= group.var("Analytic", mOptions.analyticLightWeight, 0.f, 1.f);
                 group.tooltip("Relative weight for selecting an analytical light when sampling a light.");
             }
 
             if (auto group = widget.group("Emissive lights"))
             {
-                mRecompile |= group.checkbox("Use emissive texture for sampling", mOptions->useEmissiveTextureForSampling);
+                mRecompile |= group.checkbox("Use emissive texture for sampling", mOptions.useEmissiveTextureForSampling);
                 group.tooltip("Use emissive texture for light sample evaluation.");
 
-                mRecompile |= group.checkbox("Use emissive texture for shading", mOptions->useEmissiveTextureForShading);
+                mRecompile |= group.checkbox("Use emissive texture for shading", mOptions.useEmissiveTextureForShading);
                 group.tooltip("Use emissive texture for shading.");
 
-                mRecompile |= group.checkbox("Use local emissive triangles", mOptions->useLocalEmissiveTriangles);
+                mRecompile |= group.checkbox("Use local emissive triangles", mOptions.useLocalEmissiveTriangles);
                 group.tooltip("Use local emissive triangle data structure (for more efficient sampling/evaluation).");
             }
 
             if (auto group = widget.group("Light tiles"))
             {
-                mRecompile |= group.var("Tile count", mOptions->lightTileCount, 1u, 1024u);
+                mRecompile |= group.var("Tile count", mOptions.lightTileCount, 1u, 1024u);
                 group.tooltip("Number of light tiles to compute.");
 
-                mRecompile |= group.var("Tile size", mOptions->lightTileSize, 1u, 8192u);
+                mRecompile |= group.var("Tile size", mOptions.lightTileSize, 1u, 8192u);
                 group.tooltip("Number of lights per light tile.");
             }
 
             if (auto group = widget.group("Visibility", true))
             {
-                mRecompile |= group.checkbox("Use alpha test", mOptions->useAlphaTest);
+                mRecompile |= group.checkbox("Use alpha test", mOptions.useAlphaTest);
                 group.tooltip("Use alpha testing on non-opaque triangles.");
 
-                mRecompile |= group.checkbox("Use initial visibility", mOptions->useInitialVisibility);
+                mRecompile |= group.checkbox("Use initial visibility", mOptions.useInitialVisibility);
                 group.tooltip("Check visibility on inital sample.");
 
-                mRecompile |= group.checkbox("Use final visibility", mOptions->useFinalVisibility);
+                mRecompile |= group.checkbox("Use final visibility", mOptions.useFinalVisibility);
                 group.tooltip("Check visibility on final sample.");
 
-                if (mOptions->useFinalVisibility)
+                if (mOptions.useFinalVisibility)
                 {
-                    mRecompile |= group.checkbox("Reuse final visibility", mOptions->reuseFinalVisibility);
+                    mRecompile |= group.checkbox("Reuse final visibility", mOptions.reuseFinalVisibility);
                     group.tooltip("Reuse final visibility temporally.");
                 }
             }
 
             if (auto group = widget.group("Initial resampling", true))
             {
-                mRecompile |= group.var("Screen tile size", mOptions->screenTileSize, 1u, 128u);
+                mRecompile |= group.var("Screen tile size", mOptions.screenTileSize, 1u, 128u);
                 group.tooltip("Size of screen tile that samples from the same light tile.");
 
-                mRecompile |= group.var("Initial light sample count", mOptions->initialLightSampleCount, 1u, 1024u);
+                mRecompile |= group.var("Initial light sample count", mOptions.initialLightSampleCount, 1u, 1024u);
                 group.tooltip("Number of initial light samples to resample per pixel.");
 
-                mRecompile |= group.var("Initial BRDF sample count", mOptions->initialBRDFSampleCount, 0u, 16u);
+                mRecompile |= group.var("Initial BRDF sample count", mOptions.initialBRDFSampleCount, 0u, 16u);
                 group.tooltip("Number of initial BRDF samples to resample per pixel.");
 
-                dirty |= group.var("BRDF Cutoff", mOptions->brdfCutoff, 0.f, 1.f);
+                dirty |= group.var("BRDF Cutoff", mOptions.brdfCutoff, 0.f, 1.f);
                 group.tooltip("Value in range [0,1] to determine how much to shorten BRDF rays.");
             }
 
             if (auto group = widget.group("Temporal resampling", true))
             {
-                dirty |= group.checkbox("Use temporal resampling", mOptions->useTemporalResampling);
+                dirty |= group.checkbox("Use temporal resampling", mOptions.useTemporalResampling);
 
-                mRecompile |= group.var("Max history length", mOptions->maxHistoryLength, 0u, 100u);
+                mRecompile |= group.var("Max history length", mOptions.maxHistoryLength, 0u, 100u);
                 group.tooltip("Maximum temporal history length.");
             }
 
             if (auto group = widget.group("Spatial resampling", true))
             {
-                dirty |= group.checkbox("Use spatial resampling", mOptions->useSpatialResampling);
+                dirty |= group.checkbox("Use spatial resampling", mOptions.useSpatialResampling);
 
-                dirty |= group.var("Iterations", mOptions->spatialIterations, 0u, 8u);
+                dirty |= group.var("Iterations", mOptions.spatialIterations, 0u, 8u);
                 group.tooltip("Number of spatial resampling iterations.");
 
-                dirty |= group.var("Neighbor count", mOptions->spatialNeighborCount, 0u, 32u);
+                dirty |= group.var("Neighbor count", mOptions.spatialNeighborCount, 0u, 32u);
                 group.tooltip("Number of neighbor samples to resample per pixel and iteration.");
 
-                dirty |= group.var("Gather radius", mOptions->spatialGatherRadius, 5u, 40u);
+                dirty |= group.var("Gather radius", mOptions.spatialGatherRadius, 5u, 40u);
                 group.tooltip("Radius to gather samples from.");
             }
 
-            mRecompile |= widget.checkbox("Use pairwise MIS", mOptions->usePairwiseMIS);
+            mRecompile |= widget.checkbox("Use pairwise MIS", mOptions.usePairwiseMIS);
             widget.tooltip("Use pairwise MIS when combining samples.");
 
-            mRecompile |= widget.checkbox("Unbiased", mOptions->unbiased);
+            mRecompile |= widget.checkbox("Unbiased", mOptions.unbiased);
             widget.tooltip("Use unbiased version of ReSTIR by querying extra visibility rays.");
         }
 
         if (auto group = widget.group("ReSTIR GI options"))
         {
-            mRecompile |= group.dropdown("Mode", kReSTIRModeList, reinterpret_cast<uint32_t&>(mOptions->reSTIRMode));
-            mRecompile |= group.dropdown("Target PDF", kTargetPdfList, reinterpret_cast<uint32_t&>(mOptions->targetPdf));
+            mRecompile |= group.dropdown("Mode", kReSTIRModeList, reinterpret_cast<uint32_t&>(mOptions.reSTIRMode));
+            mRecompile |= group.dropdown("Target PDF", kTargetPdfList, reinterpret_cast<uint32_t&>(mOptions.targetPdf));
 
-            dirty |= group.var("Max Temporal Samples", mOptions->reSTIRGITemporalMaxSamples, 0u, 1000u);
+            dirty |= group.var("Max Temporal Samples", mOptions.reSTIRGITemporalMaxSamples, 0u, 1000u);
             group.tooltip("Maximum number of temporal samples.");
 
-            dirty |= group.var("Max Spatial Samples", mOptions->reSTIRGISpatialMaxSamples, 0u, 5000u);
+            dirty |= group.var("Max Spatial Samples", mOptions.reSTIRGISpatialMaxSamples, 0u, 5000u);
             group.tooltip("Maximum number of temporal samples.");
 
-            dirty |= group.var("Reservoir Count", mOptions->reSTIRGIReservoirCount, 1u, 32u);
+            dirty |= group.var("Reservoir Count", mOptions.reSTIRGIReservoirCount, 1u, 32u);
             group.tooltip("Number of reservoirs per pixel.");
 
-            dirty |= group.checkbox("use ReSTIR N", mOptions->reSTIRGIUseReSTIRN);
+            dirty |= group.checkbox("use ReSTIR N", mOptions.reSTIRGIUseReSTIRN);
             group.tooltip("Try to execute ReSTIR GI N times (with a new initial samples for each time).");
 
-            dirty |= group.var("Max Sample Age", mOptions->reSTIRGIMaxSampleAge, 3u, 1000u);
+            dirty |= group.var("Max Sample Age", mOptions.reSTIRGIMaxSampleAge, 3u, 1000u);
             group.tooltip("Maximum frames that a sample can survive.");
 
-            dirty |= group.checkbox("Enable Spatial Weight Clamping", mOptions->reSTIRGIEnableSpatialWeightClamping);
-            dirty |= group.var("Spatial Weight Clamp Threshold", mOptions->reSTIRGISpatialWeightClampThreshold, 1.f, 1000.f);
+            dirty |= group.checkbox("Enable Spatial Weight Clamping", mOptions.reSTIRGIEnableSpatialWeightClamping);
+            dirty |= group.var("Spatial Weight Clamp Threshold", mOptions.reSTIRGISpatialWeightClampThreshold, 1.f, 1000.f);
 
-            dirty |= group.checkbox("Enable Jacobian Clamping", mOptions->reSTIRGIEnableJacobianClamping);
-            dirty |= group.var("Jacobian Clamp Threshold", mOptions->reSTIRGIJacobianClampTreshold, 1.f, 1000.f);
+            dirty |= group.checkbox("Enable Jacobian Clamping", mOptions.reSTIRGIEnableJacobianClamping);
+            dirty |= group.var("Jacobian Clamp Threshold", mOptions.reSTIRGIJacobianClampTreshold, 1.f, 1000.f);
 
-            dirty |= group.checkbox("Enable Temporal Jacobian", mOptions->reSTIREnableTemporalJacobian);
+            dirty |= group.checkbox("Enable Temporal Jacobian", mOptions.reSTIREnableTemporalJacobian);
 
-            mRecompile |= group.var("Diffuse Threshold", mOptions->diffuseThreshold, 0.f, 1.f);
+            mRecompile |= group.var("Diffuse Threshold", mOptions.diffuseThreshold, 0.f, 1.f);
             group.tooltip("Do not use ReSTIR GI on pixels whose diffuse component lower than this value.");
 
-            dirty |= group.checkbox("Force Clear Reservoirs", mOptions->forceClearReservoirs);
+            dirty |= group.checkbox("Force Clear Reservoirs", mOptions.forceClearReservoirs);
             group.tooltip("Force clear reservoirs.");
         }
 
@@ -311,7 +338,7 @@ namespace Falcor
 
     void ScreenSpaceReSTIR::beginFrame(RenderContext* pRenderContext, const uint2& frameDim)
     {
-        if (mOptions->enabled)
+        if (mOptions.enabled)
         {
             mFrameDim = frameDim;
 
@@ -323,7 +350,7 @@ namespace Falcor
 
     void ScreenSpaceReSTIR::endFrame(RenderContext* pRenderContext)
     {
-        if (mOptions->enabled)
+        if (mOptions.enabled)
         {
             //mFrameIndex++;
             mFrameIndex += mNumReSTIRInstances;
@@ -338,23 +365,23 @@ namespace Falcor
         }
     }
 
-    void ScreenSpaceReSTIR::updateReSTIRDI(RenderContext* pRenderContext, const Texture::SharedPtr& pMotionVectors)
+    void ScreenSpaceReSTIR::updateReSTIRDI(RenderContext* pRenderContext, const ref<Texture>& pMotionVectors)
     {
-        PROFILE("ScreenSpaceReSTIR::updateReSTIRDI");
+        FALCOR_PROFILE(pRenderContext, "ScreenSpaceReSTIR::updateReSTIRDI");
 
-        if (mOptions->enabled)
+        if (mOptions.enabled)
         {
-            mTotalRISPasses = 2 /*tile generation*/ + 1 /*initial resampling*/ + 1 /*temporal*/ + mOptions->spatialIterations /*spatial*/;
+            mTotalRISPasses = 2 /*tile generation*/ + 1 /*initial resampling*/ + 1 /*temporal*/ + mOptions.spatialIterations /*spatial*/;
             mCurRISPass = 0;
             prepareLighting(pRenderContext);
             updatePrograms();
 
-            if (mOptions->useReSTIRGI)
+            if (mOptions.useReSTIRGI)
             {
                 reSTIRGIClearPass(pRenderContext);
             }
 
-            if (!mOptions->useReSTIRDI) return;
+            if (!mOptions.useReSTIRDI) return;
             updateEmissiveTriangles(pRenderContext);
             generateLightTiles(pRenderContext);
             initialResampling(pRenderContext);
@@ -368,18 +395,19 @@ namespace Falcor
         }
     }
 
-    void ScreenSpaceReSTIR::updateReSTIRGI(RenderContext* pRenderContext, const Texture::SharedPtr& pMotionVectors)
+    void ScreenSpaceReSTIR::updateReSTIRGI(RenderContext* pRenderContext, const ref<Texture>& pMotionVectors)
     {
-        if (!mOptions->useReSTIRGI) return;
+        if (!mOptions.useReSTIRGI) return;
 
-        PROFILE("ScreenSpaceReSTIR::updateReSTIRGI");
-        if (mOptions->enabled)
+        FALCOR_PROFILE(pRenderContext, "ScreenSpaceReSTIR::updateReSTIRGI");
+        if (mOptions.enabled)
         {
             auto rootVar = mpGIResampling->getRootVar();
             mpPixelDebug->prepareProgram(mpGIResampling->getProgram(), rootVar);
 
             mpScene->setRaytracingShaderData(pRenderContext, rootVar);
 
+            // TODO: move to bindShaderDataInternal()
             auto var = rootVar["CB"]["gGIResampling"];
             var["neighborOffsets"] = mpNeighborOffsets;
             var["frameDim"] = mFrameDim;
@@ -389,23 +417,23 @@ namespace Falcor
             var["motionVectors"] = pMotionVectors;
             var["normalDepth"] = mpNormalDepthTexture;
             var["prevNormalDepth"] = mpPrevNormalDepthTexture;
-            var["temporalMaxSamples"] = mOptions->reSTIRGITemporalMaxSamples;
-            var["spatialMaxSamples"] = mOptions->reSTIRGISpatialMaxSamples;
-            var["reservoirCount"] = mOptions->reSTIRGIReservoirCount;
-            var["maxSampleAge"] = mOptions->reSTIRGIMaxSampleAge;
+            var["temporalMaxSamples"] = mOptions.reSTIRGITemporalMaxSamples;
+            var["spatialMaxSamples"] = mOptions.reSTIRGISpatialMaxSamples;
+            var["reservoirCount"] = mOptions.reSTIRGIReservoirCount;
+            var["maxSampleAge"] = mOptions.reSTIRGIMaxSampleAge;
             var["cameraOrigin"] = mpScene->getCamera()->getPosition();
-            var["prevCameraOrigin"] = mPrevCameraOrigin;
+            var["prevCameraOrigin"] = mPrevCameraData.posW;
             var["viewProj"] = mpScene->getCamera()->getViewProjMatrixNoJitter();
-            var["prevViewProj"] = mPrevViewProj;
-            var["forceClearReservoirs"] = mOptions->forceClearReservoirs;
-            var["normalThreshold"] = mOptions->normalThreshold;
-            var["depthThreshold"] = mOptions->depthThreshold;
+            var["prevViewProj"] = mPrevCameraData.viewProjMat;
+            var["forceClearReservoirs"] = mOptions.forceClearReservoirs;
+            var["normalThreshold"] = mOptions.normalThreshold;
+            var["depthThreshold"] = mOptions.depthThreshold;
             var["initialSamples"] = mpGIInitialSamples;
-            var["spatialWeightClampThreshold"] = mOptions->reSTIRGISpatialWeightClampThreshold;
-            var["enableSpatialWeightClamping"] = mOptions->reSTIRGIEnableSpatialWeightClamping;
-            var["jacobianClampThreshold"] = mOptions->reSTIRGIJacobianClampTreshold;
-            var["enableJacobianClamping"] = mOptions->reSTIRGIEnableJacobianClamping;
-            var["enableTemporalJacobian"] = mOptions->reSTIREnableTemporalJacobian;
+            var["spatialWeightClampThreshold"] = mOptions.reSTIRGISpatialWeightClampThreshold;
+            var["enableSpatialWeightClamping"] = mOptions.reSTIRGIEnableSpatialWeightClamping;
+            var["jacobianClampThreshold"] = mOptions.reSTIRGIJacobianClampTreshold;
+            var["enableJacobianClamping"] = mOptions.reSTIRGIEnableJacobianClamping;
+            var["enableTemporalJacobian"] = mOptions.reSTIREnableTemporalJacobian;
 
             //var["prevReservoirs"] = mpGIReservoirs[(mFrameIndex + 0) % 2];
             //var["reservoirs"] = mpGIReservoirs[(mFrameIndex + 1) % 2];
@@ -416,8 +444,9 @@ namespace Falcor
 
             pRenderContext->blit(mpNormalDepthTexture->getSRV(), mpPrevNormalDepthTexture->getRTV());
 
-            mPrevCameraOrigin = mpScene->getCamera()->getPosition();
-            mPrevViewProj = mpScene->getCamera()->getViewProjMatrixNoJitter();
+            //mPrevCameraOrigin = mpScene->getCamera()->getPosition();
+            //mPrevViewProj = mpScene->getCamera()->getViewProjMatrixNoJitter();
+            mPrevCameraData = mpScene->getCamera()->getData();
         }
     }
 
@@ -425,10 +454,10 @@ namespace Falcor
     {
         // Create light tile buffers.
         {
-            uint32_t elementCount = mOptions->lightTileCount * mOptions->lightTileSize;
+            uint32_t elementCount = mOptions.lightTileCount * mOptions.lightTileSize;
             if (!mpLightTileData || mpLightTileData->getElementCount() < elementCount)
             {
-                mpLightTileData = Buffer::createStructured(mpReflectTypes["lightTileData"], elementCount, Resource::BindFlags::ShaderResource | Resource::BindFlags::UnorderedAccess, Buffer::CpuAccess::None, nullptr, false);
+                mpLightTileData = mpDevice->createStructuredBuffer(mpReflectTypes->getRootVar()["lightTileData"], elementCount);
             }
         }
 
@@ -437,48 +466,48 @@ namespace Falcor
             uint32_t elementCount = mFrameDim.x * mFrameDim.y;
             if (!mpSurfaceData || mpSurfaceData->getElementCount() < elementCount)
             {
-                mpSurfaceData = Buffer::createStructured(mpReflectTypes["surfaceData"], elementCount, Resource::BindFlags::ShaderResource | Resource::BindFlags::UnorderedAccess, Buffer::CpuAccess::None, nullptr, false);
+                mpSurfaceData = mpDevice->createStructuredBuffer(mpReflectTypes->getRootVar()["surfaceData"], elementCount);
             }
             if (!mpPrevSurfaceData || mpPrevSurfaceData->getElementCount() < elementCount)
             {
-                mpPrevSurfaceData = Buffer::createStructured(mpReflectTypes["surfaceData"], elementCount, Resource::BindFlags::ShaderResource | Resource::BindFlags::UnorderedAccess, Buffer::CpuAccess::None, nullptr, false);
+                mpPrevSurfaceData = mpDevice->createStructuredBuffer(mpReflectTypes->getRootVar()["surfaceData"], elementCount);
             }
             if (!mpReservoirs || mpReservoirs->getElementCount() < elementCount || mRequestReallocate)
             {
-                //mpReservoirs = Buffer::createStructured(mpReflectTypes["reservoirs"], elementCount, Resource::BindFlags::ShaderResource | Resource::BindFlags::UnorderedAccess, Buffer::CpuAccess::None, nullptr, false);
+                //mpReservoirs = mpDevice->createStructuredBuffer(mpReflectTypes->getRootVar()["reservoirs"], elementCount, Resource::State::ShaderResource | Resource::State::UnorderedAccess, Buffer::CpuAccess::None, nullptr, false);
                 // WARNING: this assumes we use the uint4 packedReservoir by default (Reservoir.slang)
-                mpReservoirs = Buffer::createStructured(16, elementCount, Resource::BindFlags::ShaderResource | Resource::BindFlags::UnorderedAccess, Buffer::CpuAccess::None, nullptr, false);
+                mpReservoirs = mpDevice->createStructuredBuffer(16, elementCount);
             }
             if (!mpPrevReservoirs || mpPrevReservoirs->getElementCount() < elementCount || mRequestReallocate)
             {
-                //mpPrevReservoirs = Buffer::createStructured(mpReflectTypes["reservoirs"], elementCount, Resource::BindFlags::ShaderResource | Resource::BindFlags::UnorderedAccess, Buffer::CpuAccess::None, nullptr, false);
+                //mpPrevReservoirs = mpDevice->createStructuredBuffer(mpReflectTypes->getRootVar()["reservoirs"], elementCount, Resource::State::ShaderResource | Resource::State::UnorderedAccess, Buffer::CpuAccess::None, nullptr, false);
                 // WARNING: this assumes we use the uint4 packedReservoir by default (Reservoir.slang)
-                mpPrevReservoirs = Buffer::createStructured(16, elementCount, Resource::BindFlags::ShaderResource | Resource::BindFlags::UnorderedAccess, Buffer::CpuAccess::None, nullptr, false);
+                mpPrevReservoirs = mpDevice->createStructuredBuffer(16, elementCount);
             }
 
             if (!mpFinalSamples || mpFinalSamples->getElementCount() < elementCount || mRequestReallocate)
             {
-                //mpFinalSamples = Buffer::createStructured(mpReflectTypes["finalSamples"], elementCount, Resource::BindFlags::ShaderResource | Resource::BindFlags::UnorderedAccess, Buffer::CpuAccess::None, nullptr, false);
-                mpFinalSamples = Buffer::createStructured(32, elementCount, Resource::BindFlags::ShaderResource | Resource::BindFlags::UnorderedAccess, Buffer::CpuAccess::None, nullptr, false);
+                //mpFinalSamples = mpDevice->createStructuredBuffer(mpReflectTypes->getRootVar()["finalSamples"], elementCount, Resource::State::ShaderResource | Resource::State::UnorderedAccess, Buffer::CpuAccess::None, nullptr, false);
+                mpFinalSamples = mpDevice->createStructuredBuffer(32, elementCount);
             }
 
             mRequestReallocate = false;
 
-            int initialReservoirCount = mOptions->reSTIRGIUseReSTIRN ? elementCount * mOptions->reSTIRGIReservoirCount : elementCount;
+            int initialReservoirCount = mOptions.reSTIRGIUseReSTIRN ? elementCount * mOptions.reSTIRGIReservoirCount : elementCount;
 
             if (!mpGIInitialSamples || initialReservoirCount != mpGIInitialSamples->getElementCount())
             {
-                mpGIInitialSamples = Buffer::createStructured(mpReflectTypes["giReservoirs"], initialReservoirCount, Resource::BindFlags::ShaderResource | Resource::BindFlags::UnorderedAccess, Buffer::CpuAccess::None, nullptr, false);
+                mpGIInitialSamples = mpDevice->createStructuredBuffer(mpReflectTypes->getRootVar()["giReservoirs"], initialReservoirCount);
                 if (mpGIInitialSamples->getStructSize() % 16 != 0) logWarning("PackedGIReservoir struct size is not a multiple of 16B");
             }
 
-            int reservoirCount = elementCount * 2 * mOptions->reSTIRGIReservoirCount;
+            int reservoirCount = elementCount * 2 * mOptions.reSTIRGIReservoirCount;
 
             for (int i = 0; i < 2; i++)
             {
                 if (!mpGIReservoirs[i] || mpGIReservoirs[i]->getElementCount() != reservoirCount)
                 {
-                    mpGIReservoirs[i] = Buffer::createStructured(mpReflectTypes["giReservoirs"], reservoirCount, Resource::BindFlags::ShaderResource | Resource::BindFlags::UnorderedAccess, Buffer::CpuAccess::None, nullptr, false);
+                    mpGIReservoirs[i] = mpDevice->createStructuredBuffer(mpReflectTypes->getRootVar()["giReservoirs"], reservoirCount);
                     if (mpGIReservoirs[i]->getStructSize() % 16 != 0) logWarning("PackedGIReservoir struct size is not a multiple of 16B");
                 }
             }
@@ -487,18 +516,18 @@ namespace Falcor
         // Create normal/depth texture.
         if (!mpNormalDepthTexture || mpNormalDepthTexture->getWidth() != mFrameDim.x || mpNormalDepthTexture->getHeight() != mFrameDim.y)
         {
-            mpNormalDepthTexture = Texture::create2D(mFrameDim.x, mFrameDim.y, ResourceFormat::R32Uint, 1, 1, nullptr, ResourceBindFlags::ShaderResource | ResourceBindFlags::UnorderedAccess);
+            mpNormalDepthTexture = mpDevice->createTexture2D(mFrameDim.x, mFrameDim.y, ResourceFormat::R32Uint, 1, 1, nullptr, ResourceBindFlags::ShaderResource | ResourceBindFlags::UnorderedAccess);
         }
 
         if (!mpPrevNormalDepthTexture || mpPrevNormalDepthTexture->getWidth() != mFrameDim.x || mpPrevNormalDepthTexture->getHeight() != mFrameDim.y)
         {
-            mpPrevNormalDepthTexture = Texture::create2D(mFrameDim.x, mFrameDim.y, ResourceFormat::R32Uint, 1, 1, nullptr, ResourceBindFlags::ShaderResource | ResourceBindFlags::UnorderedAccess | ResourceBindFlags::RenderTarget);
+            mpPrevNormalDepthTexture = mpDevice->createTexture2D(mFrameDim.x, mFrameDim.y, ResourceFormat::R32Uint, 1, 1, nullptr, ResourceBindFlags::ShaderResource | ResourceBindFlags::UnorderedAccess | ResourceBindFlags::RenderTarget);
         }
 
         // Create debug texture.
         if (!mpDebugOutputTexture || mpDebugOutputTexture->getWidth() != mFrameDim.x || mpDebugOutputTexture->getHeight() != mFrameDim.y)
         {
-            mpDebugOutputTexture = Texture::create2D(mFrameDim.x, mFrameDim.y, ResourceFormat::RGBA32Float, 1, 1, nullptr, ResourceBindFlags::ShaderResource | ResourceBindFlags::UnorderedAccess);
+            mpDebugOutputTexture = mpDevice->createTexture2D(mFrameDim.x, mFrameDim.y, ResourceFormat::RGBA32Float, 1, 1, nullptr, ResourceBindFlags::ShaderResource | ResourceBindFlags::UnorderedAccess);
         }
     }
 
@@ -514,7 +543,12 @@ namespace Falcor
             {
                 const auto& texture = mpScene->getEnvMap()->getEnvMap();
                 auto luminances = computeEnvLightLuminance(pRenderContext, texture);
-                mpEnvLightLuminance = Buffer::createTyped<float>((uint32_t)luminances.size(), ResourceBindFlags::ShaderResource, Buffer::CpuAccess::None, luminances.data());
+                mpEnvLightLuminance = mpDevice->createTypedBuffer(
+                    (uint32_t)luminances.size(),
+                    ResourceBindFlags::ShaderResource,
+                    MemoryType::DeviceLocal,
+                    luminances.data()
+                );
                 mpEnvLightAliasTable = buildEnvLightAliasTable(texture->getWidth(), texture->getHeight(), luminances, mRng);
                 mRecompile = true;
             }
@@ -538,9 +572,11 @@ namespace Falcor
             {
                 auto lightCollection = mpScene->getLightCollection(pRenderContext);
                 lightCollection->update(pRenderContext);
-                if (lightCollection->getActiveLightCount() > 0)
+                if (mpScene->getActiveLightCount() > 0)
                 {
-                    mpEmissiveTriangles = Buffer::createStructured(mpReflectTypes["emissiveTriangles"], lightCollection->getTotalLightCount(), Resource::BindFlags::ShaderResource | Resource::BindFlags::UnorderedAccess, Buffer::CpuAccess::None, nullptr, false);
+                    mpEmissiveTriangles = mpDevice->createStructuredBuffer(
+                        mpReflectTypes->getRootVar()["emissiveTriangles"], lightCollection->getTotalLightCount()
+                    );
                     mpEmissiveLightAliasTable = buildEmissiveLightAliasTable(pRenderContext, lightCollection, mRng);
                     mRecompile = true;
                 }
@@ -562,7 +598,7 @@ namespace Falcor
             if (is_set(mpScene->getUpdates(), Scene::UpdateFlags::LightCountChanged)) mpAnalyticLightAliasTable = nullptr;
             if (!mpAnalyticLightAliasTable)
             {
-                std::vector<Light::SharedPtr> lights;
+                std::vector<ref<Light>> lights;
                 for (uint32_t i = 0; i < mpScene->getLightCount(); ++i)
                 {
                     const auto& light = mpScene->getLight(i);
@@ -586,9 +622,9 @@ namespace Falcor
 
         // Compute light selection probabilities.
         auto& probs = mLightSelectionProbabilities;
-        probs.envLight = mpEnvLightAliasTable ? mOptions->envLightWeight : 0.f;
-        probs.emissiveLights = mpEmissiveLightAliasTable ? mOptions->emissiveLightWeight : 0.f;
-        probs.analyticLights = mpAnalyticLightAliasTable ? mOptions->analyticLightWeight : 0.f;
+        probs.envLight = mpEnvLightAliasTable ? mOptions.envLightWeight : 0.f;
+        probs.emissiveLights = mpEmissiveLightAliasTable ? mOptions.emissiveLightWeight : 0.f;
+        probs.analyticLights = mpAnalyticLightAliasTable ? mOptions.analyticLightWeight : 0.f;
         float total = probs.envLight + probs.emissiveLights + probs.analyticLights;
         if (total > 0.f)
         {
@@ -602,24 +638,24 @@ namespace Falcor
     {
         if (!mRecompile) return;
 
-        Program::DefineList commonDefines;
+        DefineList commonDefines;
 
         commonDefines.add(getDefines());
         commonDefines.add(mpScene->getSceneDefines());
         commonDefines.add(getLightsDefines());
-        commonDefines.add("USE_ALPHA_TEST", mOptions->useAlphaTest ? "1" : "0");
-        commonDefines.add("DEBUG_OUTPUT", std::to_string((uint32_t)mOptions->debugOutput));
+        commonDefines.add("USE_ALPHA_TEST", mOptions.useAlphaTest ? "1" : "0");
+        commonDefines.add("DEBUG_OUTPUT", std::to_string((uint32_t)mOptions.debugOutput));
 
         // UpdateEmissiveTriangles
 
         {
-            Program::DefineList defines = commonDefines;
+            DefineList defines = commonDefines;
 
             if (!mpUpdateEmissiveTriangles)
             {
-                Program::Desc desc;
+                ProgramDesc desc;
                 desc.addShaderLibrary(kUpdateEmissiveTriangles).csEntry("main").setShaderModel(kShaderModel);
-                mpUpdateEmissiveTriangles = ComputePass::create(desc, defines, false);
+                mpUpdateEmissiveTriangles = ComputePass::create(mpDevice, desc, defines, false);
             }
 
             mpUpdateEmissiveTriangles->getProgram()->addDefines(defines);
@@ -629,21 +665,21 @@ namespace Falcor
         // GenerateLightTiles
 
         {
-            Program::DefineList defines = commonDefines;
+            DefineList defines = commonDefines;
 
-            defines.add("LIGHT_TILE_COUNT", std::to_string(mOptions->lightTileCount));
-            defines.add("LIGHT_TILE_SIZE", std::to_string(mOptions->lightTileSize));
+            defines.add("LIGHT_TILE_COUNT", std::to_string(mOptions.lightTileCount));
+            defines.add("LIGHT_TILE_SIZE", std::to_string(mOptions.lightTileSize));
 
-            auto [envLightSampleCount, emissiveLightSampleCount, analyticLightSampleCount] = mLightSelectionProbabilities.getSampleCount(mOptions->lightTileSize);
+            auto [envLightSampleCount, emissiveLightSampleCount, analyticLightSampleCount] = mLightSelectionProbabilities.getSampleCount(mOptions.lightTileSize);
             defines.add("ENV_LIGHT_SAMPLE_COUNT", std::to_string(envLightSampleCount));
             defines.add("EMISSIVE_LIGHT_SAMPLE_COUNT", std::to_string(emissiveLightSampleCount));
             defines.add("ANALYTIC_LIGHT_SAMPLE_COUNT", std::to_string(analyticLightSampleCount));
 
             if (!mpGenerateLightTiles)
             {
-                Program::Desc desc;
+                ProgramDesc desc;
                 desc.addShaderLibrary(kGenerateLightTilesFile).csEntry("main").setShaderModel(kShaderModel);
-                mpGenerateLightTiles = ComputePass::create(desc, defines, false);
+                mpGenerateLightTiles = ComputePass::create(mpDevice, desc, defines, false);
             }
 
             mpGenerateLightTiles->getProgram()->addDefines(defines);
@@ -653,24 +689,24 @@ namespace Falcor
         // InitialResampling
 
         {
-            Program::DefineList defines = commonDefines;
+            DefineList defines = commonDefines;
 
-            defines.add("LIGHT_TILE_COUNT", std::to_string(mOptions->lightTileCount));
-            defines.add("LIGHT_TILE_SIZE", std::to_string(mOptions->lightTileSize));
+            defines.add("LIGHT_TILE_COUNT", std::to_string(mOptions.lightTileCount));
+            defines.add("LIGHT_TILE_SIZE", std::to_string(mOptions.lightTileSize));
 
-            defines.add("SCREEN_TILE_SIZE", std::to_string(mOptions->screenTileSize));
-            defines.add("INITIAL_LIGHT_SAMPLE_COUNT", std::to_string(mOptions->initialLightSampleCount));
-            defines.add("INITIAL_BRDF_SAMPLE_COUNT", std::to_string(mOptions->initialBRDFSampleCount));
+            defines.add("SCREEN_TILE_SIZE", std::to_string(mOptions.screenTileSize));
+            defines.add("INITIAL_LIGHT_SAMPLE_COUNT", std::to_string(mOptions.initialLightSampleCount));
+            defines.add("INITIAL_BRDF_SAMPLE_COUNT", std::to_string(mOptions.initialBRDFSampleCount));
 
             // Only need to check visibility if either temporal or spatial reuse is active.
-            bool checkVisibility = mOptions->useInitialVisibility & (mOptions->useTemporalResampling || mOptions->useSpatialResampling);
+            bool checkVisibility = mOptions.useInitialVisibility & (mOptions.useTemporalResampling || mOptions.useSpatialResampling);
             defines.add("CHECK_VISIBILITY", checkVisibility ? "1" : "0");
 
             if (!mpInitialResampling)
             {
-                Program::Desc desc;
+                ProgramDesc desc;
                 desc.addShaderLibrary(kInitialResamplingFile).csEntry("main").setShaderModel(kShaderModel);
-                mpInitialResampling = ComputePass::create(desc, defines, false);
+                mpInitialResampling = ComputePass::create(mpDevice, desc, defines, false);
             }
 
             mpInitialResampling->getProgram()->addDefines(defines);
@@ -680,22 +716,22 @@ namespace Falcor
         // TemporalResampling
 
         {
-            Program::DefineList defines = commonDefines;
+            DefineList defines = commonDefines;
 
-            defines.add("MAX_HISTORY_LENGTH", std::to_string(mOptions->maxHistoryLength));
+            defines.add("MAX_HISTORY_LENGTH", std::to_string(mOptions.maxHistoryLength));
             // TODO: We currently disable pairwise MIS in the temporal resampling pass.
             // It seems to lead to a lot of variance under camera movement.
             defines.add("USE_PAIRWISE_MIS", "0");
             // TODO: We currently skip shadow rays in the temporal resampling pass.
             // This is not always correct, need to figure out when it needs to be enabled.
-            // defines.add("UNBIASED", mOptions->unbiased ? "1" : "0");
+            // defines.add("UNBIASED", mOptions.unbiased ? "1" : "0");
             defines.add("UNBIASED", "0");
 
             if (!mpTemporalResampling)
             {
-                Program::Desc desc;
+                ProgramDesc desc;
                 desc.addShaderLibrary(kTemporalResamplingFile).csEntry("main").setShaderModel(kShaderModel);
-                mpTemporalResampling = ComputePass::create(desc, defines, false);
+                mpTemporalResampling = ComputePass::create(mpDevice, desc, defines, false);
             }
 
             mpTemporalResampling->getProgram()->addDefines(defines);
@@ -705,18 +741,18 @@ namespace Falcor
         // SpatialResampling
 
         {
-            Program::DefineList defines = commonDefines;
+            DefineList defines = commonDefines;
 
             defines.add("NEIGHBOR_OFFSET_COUNT", std::to_string(mpNeighborOffsets->getWidth()));
-            defines.add("USE_PAIRWISE_MIS", mOptions->usePairwiseMIS ? "1" : "0");
+            defines.add("USE_PAIRWISE_MIS", mOptions.usePairwiseMIS ? "1" : "0");
 
-            defines.add("UNBIASED", mOptions->unbiased ? "1" : "0");
+            defines.add("UNBIASED", mOptions.unbiased ? "1" : "0");
 
             if (!mpSpatialResampling)
             {
-                Program::Desc desc;
+                ProgramDesc desc;
                 desc.addShaderLibrary(kSpatialResamplingFile).csEntry("main").setShaderModel(kShaderModel);
-                mpSpatialResampling = ComputePass::create(desc, defines, false);
+                mpSpatialResampling = ComputePass::create(mpDevice, desc, defines, false);
             }
 
             mpSpatialResampling->getProgram()->addDefines(defines);
@@ -726,16 +762,16 @@ namespace Falcor
         // EvaluateFinalSamples
 
         {
-            Program::DefineList defines = commonDefines;
+            DefineList defines = commonDefines;
 
-            defines.add("USE_VISIBILITY", mOptions->useFinalVisibility ? "1" : "0");
-            defines.add("REUSE_VISIBILITY", (mOptions->useFinalVisibility && mOptions->reuseFinalVisibility) ? "1" : "0");
+            defines.add("USE_VISIBILITY", mOptions.useFinalVisibility ? "1" : "0");
+            defines.add("REUSE_VISIBILITY", (mOptions.useFinalVisibility && mOptions.reuseFinalVisibility) ? "1" : "0");
 
             if (!mpEvaluateFinalSamples)
             {
-                Program::Desc desc;
+                ProgramDesc desc;
                 desc.addShaderLibrary(kEvaluateFinalSamplesFile).csEntry("main").setShaderModel(kShaderModel);
-                mpEvaluateFinalSamples = ComputePass::create(desc, defines, false);
+                mpEvaluateFinalSamples = ComputePass::create(mpDevice, desc, defines, false);
             }
 
             mpEvaluateFinalSamples->getProgram()->addDefines(defines);
@@ -743,26 +779,26 @@ namespace Falcor
         }
 
         {
-            Program::DefineList defines = commonDefines;
+            DefineList defines = commonDefines;
 
-            defines.add("RESTIR_MODE", std::to_string((int)mOptions->reSTIRMode));
-            defines.add("RESTIR_TARGET_FUNCTION", std::to_string((int)mOptions->targetPdf));
+            defines.add("RESTIR_MODE", std::to_string((int)mOptions.reSTIRMode));
+            defines.add("RESTIR_TARGET_FUNCTION", std::to_string((int)mOptions.targetPdf));
             defines.add("NEIGHBOR_OFFSET_COUNT", std::to_string(mpNeighborOffsets->getWidth()));
 
             if (!mpGIClearReservoirs)
             {
-                Program::Desc desc;
+                ProgramDesc desc;
                 desc.addShaderLibrary(kGIClearReservoirsFile).csEntry("main").setShaderModel(kShaderModel);
-                mpGIClearReservoirs = ComputePass::create(desc, defines, false);
+                mpGIClearReservoirs = ComputePass::create(mpDevice, desc, defines, false);
             }
             mpGIClearReservoirs->getProgram()->addDefines(defines);
             mpGIClearReservoirs->setVars(nullptr);
 
             if (!mpGIResampling)
             {
-                Program::Desc desc;
+                ProgramDesc desc;
                 desc.addShaderLibrary(kGIResamplingFile).csEntry("main").setShaderModel(kShaderModel);
-                mpGIResampling = ComputePass::create(desc, defines, false);
+                mpGIResampling = ComputePass::create(mpDevice, desc, defines, false);
             }
 
             mpGIResampling->getProgram()->addDefines(defines);
@@ -775,13 +811,15 @@ namespace Falcor
 
     void ScreenSpaceReSTIR::updateEmissiveTriangles(RenderContext* pRenderContext)
     {
-        PROFILE("updateEmissiveTriangles");
+        FALCOR_PROFILE(pRenderContext, "updateEmissiveTriangles");
 
-        if (!mOptions->useLocalEmissiveTriangles || !mpEmissiveTriangles) return;
+        if (!mOptions.useLocalEmissiveTriangles || !mpEmissiveTriangles) return;
 
-        mpUpdateEmissiveTriangles["gScene"] = mpScene->getParameterBlock();
+        //mpUpdateEmissiveTriangles->getRootVar()["gScene"] = mpScene->getParameterBlock();
+        mpScene->bindShaderData(mpUpdateEmissiveTriangles->getRootVar()["gScene"]);
 
-        auto var = mpUpdateEmissiveTriangles["CB"]["gUpdateEmissiveTriangles"];
+        //auto var = mpUpdateEmissiveTriangles["CB"]["gUpdateEmissiveTriangles"];
+        auto var = mpUpdateEmissiveTriangles->getRootVar()["CB"]["gUpdateEmissiveTriangles"];
 
         uint32_t triangleCount = mpEmissiveTriangles->getElementCount();
 
@@ -793,25 +831,27 @@ namespace Falcor
 
     void ScreenSpaceReSTIR::generateLightTiles(RenderContext* pRenderContext)
     {
-        PROFILE("generateLightTiles");
+        FALCOR_PROFILE(pRenderContext, "generateLightTiles");
 
-        mpGenerateLightTiles["gScene"] = mpScene->getParameterBlock();
+        //mpGenerateLightTiles->getRootVar()["gScene"] = mpScene->getParameterBlock();
+        mpScene->bindShaderData(mpGenerateLightTiles->getRootVar()["gScene"]);
 
-        auto var = mpGenerateLightTiles["CB"]["gGenerateLightTiles"];
+        auto var = mpGenerateLightTiles->getRootVar()["CB"]["gGenerateLightTiles"];
 
         var["lightTileData"] = mpLightTileData;
         setLightsShaderData(var["lights"]);
         var["frameIndex"] = mTotalRISPasses * mFrameIndex + mCurRISPass;
         mCurRISPass += 2;
 
-        mpGenerateLightTiles->execute(pRenderContext, uint3(mOptions->lightTileSize, mOptions->lightTileCount, 1));
+        mpGenerateLightTiles->execute(pRenderContext, uint3(mOptions.lightTileSize, mOptions.lightTileCount, 1));
     }
 
     void ScreenSpaceReSTIR::initialResampling(RenderContext* pRenderContext)
     {
-        PROFILE("initialResampling");
+        FALCOR_PROFILE(pRenderContext, "initialResampling");
 
-        mpInitialResampling["gScene"] = mpScene->getParameterBlock();
+        //mpInitialResampling->getRootVar()["gScene"] = mpScene->getParameterBlock();
+        mpScene->bindShaderData(mpInitialResampling->getRootVar()["gScene"]);
 
         auto rootVar = mpInitialResampling->getRootVar();
 
@@ -827,15 +867,15 @@ namespace Falcor
         setLightsShaderData(var["lights"]);
         var["frameDim"] = mFrameDim;
         var["frameIndex"] = mTotalRISPasses * mFrameIndex + mCurRISPass;
-        var["brdfCutoff"] = mOptions->brdfCutoff;
+        var["brdfCutoff"] = mOptions.brdfCutoff;
         mCurRISPass++;
 
         mpInitialResampling->execute(pRenderContext, mFrameDim.x, mFrameDim.y, 1);
     }
 
-    void ScreenSpaceReSTIR::temporalResampling(RenderContext* pRenderContext, const Texture::SharedPtr& pMotionVectors)
+    void ScreenSpaceReSTIR::temporalResampling(RenderContext* pRenderContext, const ref<Texture>& pMotionVectors)
     {
-        PROFILE("temporalResampling");
+        FALCOR_PROFILE(pRenderContext, "temporalResampling");
 
         if (mResetTemporalReservoirs)
         {
@@ -843,9 +883,10 @@ namespace Falcor
             return;
         }
 
-        if (!mOptions->useTemporalResampling) return;
+        if (!mOptions.useTemporalResampling) return;
 
-        mpTemporalResampling["gScene"] = mpScene->getParameterBlock();
+        //mpTemporalResampling->getRootVar()["gScene"] = mpScene->getParameterBlock();
+        mpScene->bindShaderData(mpTemporalResampling->getRootVar()["gScene"]);
 
         auto rootVar = mpTemporalResampling->getRootVar();
 
@@ -862,8 +903,8 @@ namespace Falcor
         setLightsShaderData(var["lights"]);
         var["frameDim"] = mFrameDim;
         var["frameIndex"] = mTotalRISPasses * mFrameIndex + mCurRISPass;
-        var["normalThreshold"] = mOptions->normalThreshold;
-        var["depthThreshold"] = mOptions->depthThreshold;
+        var["normalThreshold"] = mOptions.normalThreshold;
+        var["depthThreshold"] = mOptions.depthThreshold;
         mCurRISPass++;
 
         mpTemporalResampling->execute(pRenderContext, mFrameDim.x, mFrameDim.y, 1);
@@ -871,11 +912,12 @@ namespace Falcor
 
     void ScreenSpaceReSTIR::spatialResampling(RenderContext* pRenderContext)
     {
-        PROFILE("spatialResampling");
+        FALCOR_PROFILE(pRenderContext, "spatialResampling");
 
-        if (!mOptions->useSpatialResampling) return;
+        if (!mOptions.useSpatialResampling) return;
 
-        mpSpatialResampling["gScene"] = mpScene->getParameterBlock();
+        //mpSpatialResampling->getRootVar()["gScene"] = mpScene->getParameterBlock();
+        mpScene->bindShaderData(mpSpatialResampling->getRootVar()["gScene"]);
 
         auto rootVar = mpSpatialResampling->getRootVar();
 
@@ -889,12 +931,12 @@ namespace Falcor
         var["neighborOffsets"] = mpNeighborOffsets;
         setLightsShaderData(var["lights"]);
         var["frameDim"] = mFrameDim;
-        var["normalThreshold"] = mOptions->normalThreshold;
-        var["depthThreshold"] = mOptions->depthThreshold;
-        var["neighborCount"] = mOptions->spatialNeighborCount;
-        var["gatherRadius"] = (float)mOptions->spatialGatherRadius;
+        var["normalThreshold"] = mOptions.normalThreshold;
+        var["depthThreshold"] = mOptions.depthThreshold;
+        var["neighborCount"] = mOptions.spatialNeighborCount;
+        var["gatherRadius"] = (float)mOptions.spatialGatherRadius;
 
-        for (uint32_t iteration = 0; iteration < mOptions->spatialIterations; ++iteration)
+        for (uint32_t iteration = 0; iteration < mOptions.spatialIterations; ++iteration)
         {
             std::swap(mpReservoirs, mpPrevReservoirs);
             var["reservoirs"] = mpReservoirs;
@@ -907,9 +949,10 @@ namespace Falcor
 
     void ScreenSpaceReSTIR::evaluateFinalSamples(RenderContext* pRenderContext)
     {
-        PROFILE("evaluateFinalSamples");
+        FALCOR_PROFILE(pRenderContext, "evaluateFinalSamples");
 
-        mpEvaluateFinalSamples["gScene"] = mpScene->getParameterBlock();
+        //mpEvaluateFinalSamples->getRootVar()["gScene"] = mpScene->getParameterBlock();
+        mpScene->bindShaderData(mpEvaluateFinalSamples->getRootVar()["gScene"]);
 
         auto rootVar = mpEvaluateFinalSamples->getRootVar();
 
@@ -930,15 +973,15 @@ namespace Falcor
 
     void ScreenSpaceReSTIR::reSTIRGIClearPass(RenderContext* pRenderContext)
     {
-        PROFILE("reSTIRGIClearPass");
+        FALCOR_PROFILE(pRenderContext, "reSTIRGIClearPass");
 
         // Bind resources.
         auto var = mpGIClearReservoirs->getRootVar()["CB"]["gGIClearReservoirs"];
 
         var["frameDim"] = mFrameDim;
         var["frameCount"] = mFrameIndex;
-        var["forceClearReservoirs"] = mOptions->forceClearReservoirs;
-        var["reservoirCount"] = mOptions->reSTIRGIReservoirCount;
+        var["forceClearReservoirs"] = mOptions.forceClearReservoirs;
+        var["reservoirCount"] = mOptions.reSTIRGIReservoirCount;
 
         var["initialSamples"] = mpGIInitialSamples;
         var["reservoirBuffer0"] = mpGIReservoirs[0];
@@ -947,9 +990,9 @@ namespace Falcor
         mpGIClearReservoirs->execute(pRenderContext, mFrameDim.x, mFrameDim.y, 1u);
     }
 
-    Program::DefineList ScreenSpaceReSTIR::getLightsDefines() const
+    DefineList ScreenSpaceReSTIR::getLightsDefines() const
     {
-        Program::DefineList defines;
+        DefineList defines;
 
         uint32_t envIndexBits = 26;
         uint32_t envPositionBits = 4;
@@ -960,7 +1003,7 @@ namespace Falcor
         uint32_t analyticIndexBits = 14;
         uint32_t analyticPositionBits = 16;
 
-        auto computeIndexPositionBits = [] (const AliasTable::SharedPtr& aliasTable, uint32_t& indexBits, uint32_t& positionBits)
+        auto computeIndexPositionBits = [](const ref<AliasTable>& aliasTable, uint32_t& indexBits, uint32_t& positionBits)
         {
             if (!aliasTable) return;
             uint32_t count = aliasTable->getCount();
@@ -989,9 +1032,9 @@ namespace Falcor
         defines.add("LIGHT_SAMPLE_ANALYTIC_INDEX_BITS", std::to_string(analyticIndexBits));
         defines.add("LIGHT_SAMPLE_ANALYTIC_POSITION_BITS", std::to_string(analyticPositionBits));
 
-        defines.add("USE_EMISSIVE_TEXTURE_FOR_SAMPLING", mOptions->useEmissiveTextureForSampling ? "1" : "0");
-        defines.add("USE_EMISSIVE_TEXTURE_FOR_SHADING", mOptions->useEmissiveTextureForShading ? "1" : "0");
-        defines.add("USE_LOCAL_EMISSIVE_TRIANGLES", mOptions->useLocalEmissiveTriangles ? "1" : "0");
+        defines.add("USE_EMISSIVE_TEXTURE_FOR_SAMPLING", mOptions.useEmissiveTextureForSampling ? "1" : "0");
+        defines.add("USE_EMISSIVE_TEXTURE_FOR_SHADING", mOptions.useEmissiveTextureForShading ? "1" : "0");
+        defines.add("USE_LOCAL_EMISSIVE_TRIANGLES", mOptions.useLocalEmissiveTriangles ? "1" : "0");
 
         return defines;
     }
@@ -1001,9 +1044,9 @@ namespace Falcor
         var["envLightLuminance"] = mpEnvLightLuminance;
         var["emissiveTriangles"] = mpEmissiveTriangles;
 
-        if (mpEnvLightAliasTable) mpEnvLightAliasTable->setShaderData(var["envLightAliasTable"]);
-        if (mpEmissiveLightAliasTable) mpEmissiveLightAliasTable->setShaderData(var["emissiveLightAliasTable"]);
-        if (mpAnalyticLightAliasTable) mpAnalyticLightAliasTable->setShaderData(var["analyticLightAliasTable"]);
+        if (mpEnvLightAliasTable) mpEnvLightAliasTable->bindShaderData(var["envLightAliasTable"]);
+        if (mpEmissiveLightAliasTable) mpEmissiveLightAliasTable->bindShaderData(var["emissiveLightAliasTable"]);
+        if (mpAnalyticLightAliasTable) mpAnalyticLightAliasTable->bindShaderData(var["analyticLightAliasTable"]);
 
         var["envLightLuminanceFactor"] = mEnvLightLuminanceFactor;
 
@@ -1012,7 +1055,7 @@ namespace Falcor
         var["analyticLightSelectionProbability"] = mLightSelectionProbabilities.analyticLights;
     }
 
-    std::vector<float> ScreenSpaceReSTIR::computeEnvLightLuminance(RenderContext* pRenderContext, const Texture::SharedPtr& texture)
+    std::vector<float> ScreenSpaceReSTIR::computeEnvLightLuminance(RenderContext* pRenderContext, const ref<Texture>& texture)
     {
         assert(texture);
 
@@ -1027,7 +1070,7 @@ namespace Falcor
         }
         else
         {
-            auto floatTexture = Texture::create2D(width, height, ResourceFormat::RGBA32Float, 1, 1, nullptr, ResourceBindFlags::RenderTarget | ResourceBindFlags::ShaderResource);
+            auto floatTexture = mpDevice->createTexture2D(width, height, ResourceFormat::RGBA32Float, 1, 1, nullptr, ResourceBindFlags::RenderTarget | ResourceBindFlags::ShaderResource);
             pRenderContext->blit(texture->getSRV(), floatTexture->getRTV());
             texelsRaw = pRenderContext->readTextureSubresource(floatTexture.get(), 0);
         }
@@ -1062,7 +1105,7 @@ namespace Falcor
         return luminances;
     }
 
-    AliasTable::SharedPtr ScreenSpaceReSTIR::buildEnvLightAliasTable(uint32_t width, uint32_t height, const std::vector<float>& luminances, std::mt19937& rng)
+    ref<AliasTable> ScreenSpaceReSTIR::buildEnvLightAliasTable(uint32_t width, uint32_t height, const std::vector<float>& luminances, std::mt19937& rng)
     {
         assert(luminances.size() == width * height);
 
@@ -1080,16 +1123,16 @@ namespace Falcor
             }
         }
 
-        return AliasTable::create(std::move(weights), rng);
+        return make_ref<AliasTable>(mpDevice, std::move(weights), rng);
     }
 
-    AliasTable::SharedPtr ScreenSpaceReSTIR::buildEmissiveLightAliasTable(RenderContext* pRenderContext, const LightCollection::SharedPtr& lightCollection, std::mt19937& rng)
+    ref<AliasTable> ScreenSpaceReSTIR::buildEmissiveLightAliasTable(RenderContext* pRenderContext, const ref<LightCollection>& lightCollection, std::mt19937& rng)
     {
         assert(lightCollection);
 
         lightCollection->update(pRenderContext);
 
-        const auto& triangles = lightCollection->getMeshLightTriangles();
+        const auto& triangles = lightCollection->getMeshLightTriangles(pRenderContext);
 
         std::vector<float> weights(triangles.size());
 
@@ -1098,10 +1141,10 @@ namespace Falcor
             weights[i] = luminance(triangles[i].averageRadiance) * triangles[i].area;
         }
 
-        return AliasTable::create(std::move(weights), rng);
+        return make_ref<AliasTable>(mpDevice, std::move(weights), rng);
     }
 
-    AliasTable::SharedPtr ScreenSpaceReSTIR::buildAnalyticLightAliasTable(RenderContext* pRenderContext, const std::vector<Light::SharedPtr>& lights, std::mt19937& rng)
+    ref<AliasTable> ScreenSpaceReSTIR::buildAnalyticLightAliasTable(RenderContext* pRenderContext, const std::vector<ref<Light>>& lights, std::mt19937& rng)
     {
         std::vector<float> weights(lights.size());
 
@@ -1111,10 +1154,10 @@ namespace Falcor
             weights[i] = 1.f;
         }
 
-        return AliasTable::create(std::move(weights), rng);
+        return make_ref<AliasTable>(mpDevice, std::move(weights), rng);
     }
 
-    Texture::SharedPtr ScreenSpaceReSTIR::createNeighborOffsetTexture(uint32_t sampleCount)
+    ref<Texture> ScreenSpaceReSTIR::createNeighborOffsetTexture(uint32_t sampleCount)
     {
         std::unique_ptr<int8_t[]> offsets(new int8_t[sampleCount * 2]);
         const int R = 254;
@@ -1135,9 +1178,10 @@ namespace Falcor
             offsets[index++] = int8_t((v - 0.5f) * R);
         }
 
-        return Texture::create1D(sampleCount, ResourceFormat::RG8Snorm, 1, 1, offsets.get());
+        return mpDevice->createTexture1D(sampleCount, ResourceFormat::RG8Snorm, 1, 1, offsets.get());
     }
 
+    /*
     void ScreenSpaceReSTIR::scriptBindings(pybind11::module& m)
     {
         ScriptBindings::SerializableStruct<Options> options(m, "ScreenSpaceReSTIROptions");
@@ -1189,4 +1233,5 @@ namespace Falcor
         options.field(forceClearReservoirs);
 #undef field
     }
+    */
 }
