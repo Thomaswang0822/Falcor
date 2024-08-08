@@ -11,6 +11,7 @@
 #include "Falcor.h"
 #include "RenderGraph/RenderPass.h"
 #include "Rendering/ScreenSpaceReSTIR/ScreenSpaceReSTIR.h"
+#include "Rendering/Utils/PixelStats.h"
 
 using namespace Falcor;
 
@@ -25,7 +26,9 @@ public:
     FALCOR_PLUGIN_CLASS(ScreenSpaceReSTIRPass, "ScreenSpaceReSTIRPass",
         {"Standalone pass for screen-space ReSTIR, which includes ReSTIR DI and GI."})
 
-    static ref<ScreenSpaceReSTIRPass> create(RenderContext* pRenderContext = nullptr, const Dictionary& dict = {});
+    static ref<ScreenSpaceReSTIRPass> create(ref<Device> pDevice, const Properties& props) {
+        return make_ref<ScreenSpaceReSTIRPass>(pDevice, props);
+    }
 
     ScreenSpaceReSTIRPass(ref<Device> pDevice, const Properties& props);
 
@@ -39,17 +42,25 @@ public:
     virtual bool onMouseEvent(const MouseEvent& mouseEvent) override;
     virtual bool onKeyEvent(const KeyboardEvent& keyEvent) override { return false; }
 
+    PixelStats& getPixelStats() const { return *mpPixelStats; }
+
+    void reset();
+
+    static void registerBindings(pybind11::module& m);
+
 private:
     void parseProperties(const Properties& props);
-    void recreatePrograms();
+    //void recreatePrograms();
     void prepareSurfaceData(RenderContext* pRenderContext, const ref<Texture>& pVBuffer, int instanceID);
     void finalShading(RenderContext* pRenderContext, const ref<Texture>& pVBuffer, const RenderData& renderData, int instanceID);
 
     // Internal state
     ref<Scene> mpScene;
 
-    std::unique_ptr<ScreenSpaceReSTIR> mpScreenSpaceReSTIR;
+    std::vector<std::unique_ptr<ScreenSpaceReSTIR>> mpScreenSpaceReSTIR;
     ScreenSpaceReSTIR::Options mOptions;
+    std::unique_ptr<PixelStats> mpPixelStats; ///< Utility class for collecting pixel stats.
+    std::unique_ptr<PixelDebug> mpPixelDebug; ///< Utility class for pixel debugging (print in shaders).
 
     ref<ComputePass> mpPrepareSurfaceDataPass;
     ref<ComputePass> mpFinalShadingPass;

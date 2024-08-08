@@ -43,42 +43,77 @@ namespace
     const char* kNumReSTIRInstances = "NumReSTIRInstances";
 }
 
-extern "C" FALCOR_API_EXPORT void getPasses(Falcor::RenderPassLibrary & lib)
+extern "C" FALCOR_API_EXPORT void registerPlugin(Falcor::PluginRegistry& registry)
 {
-    lib.registerClass("ScreenSpaceReSTIRPass", kDesc, ScreenSpaceReSTIRPass::create);
+    registry.registerClass<RenderPass, ScreenSpaceReSTIRPass>();
+    ScriptBindings::registerBinding(ScreenSpaceReSTIRPass::registerBindings);
+    //lib.registerClass("ScreenSpaceReSTIRPass", kDesc, ScreenSpaceReSTIRPass::create);
 }
 
-std::string ScreenSpaceReSTIRPass::getDesc() { return kDesc; }
-
-ScreenSpaceReSTIRPass::SharedPtr ScreenSpaceReSTIRPass::create(RenderContext* pRenderContext, const Dictionary& dict)
+void ScreenSpaceReSTIRPass::reset()
 {
-    return SharedPtr(new ScreenSpaceReSTIRPass(dict));
+    
 }
 
-ScreenSpaceReSTIRPass::ScreenSpaceReSTIRPass(const Dictionary& dict)
+void ScreenSpaceReSTIRPass::registerBindings(pybind11::module& m)
 {
-    parseDictionary(dict);
+    pybind11::class_<ScreenSpaceReSTIRPass, RenderPass, ref<ScreenSpaceReSTIRPass>> pass(m, "ScreenSpaceReSTIRPass");
+    pass.def("reset", &ScreenSpaceReSTIRPass::reset);
+    pass.def_property_readonly("pixelStats", &ScreenSpaceReSTIRPass::getPixelStats);
+
+    /// There isn't a params.slang that defines SSReSTIRParams, thus no mParams exists.
+    /// 
+    /*pass.def_property(
+        "useFixedSeed",
+        [](const ScreenSpaceReSTIRPass* pt) { return pt->mParams.useFixedSeed ? true : false; },
+        [](ScreenSpaceReSTIRPass* pt, bool value) { pt->mParams.useFixedSeed = value ? 1 : 0; }
+    );
+    pass.def_property(
+        "fixedSeed",
+        [](const ScreenSpaceReSTIRPass* pt) { return pt->mParams.fixedSeed; },
+        [](ScreenSpaceReSTIRPass* pt, uint32_t value) { pt->mParams.fixedSeed = value; }
+    );*/
 }
 
-void ScreenSpaceReSTIRPass::parseDictionary(const Dictionary& dict)
+//std::string ScreenSpaceReSTIRPass::getDesc() { return kDesc; }
+
+ScreenSpaceReSTIRPass::ScreenSpaceReSTIRPass(ref<Device> pDevice, const Properties& props) : RenderPass(pDevice)
+{
+    parseProperties(props);
+}
+
+void ScreenSpaceReSTIRPass::parseProperties(const Properties& props)
 {
     ScreenSpaceReSTIR::Options options;
-    for (const auto& [key, value] : dict)
+    for (const auto& [key, value] : props)
     {
-        if (key == kOptions) options = value;
-        else if (key == kNumReSTIRInstances) mNumReSTIRInstances = value;
-        else logWarning("Unknown field '" + key + "' in ScreenSpaceReSTIRPass dictionary");
+        if (key == kOptions)
+            mOptions = value;
+        else if (key == kNumReSTIRInstances)
+            mNumReSTIRInstances = value;
+        else
+            logWarning("Unknown field '" + key + "' in ScreenSpaceReSTIRPass dictionary");
     }
-    mOptions = ScreenSpaceReSTIR::Options::create(options);
-    if (!mpScreenSpaceReSTIR.empty() && mpScreenSpaceReSTIR[0]) mpScreenSpaceReSTIR[0]->mOptions = mOptions;
+    //mOptions = make_ref<ScreenSpaceReSTIR::Options>(options);
+    //ScreenSpaceReSTIR::Options::create(options);
+
+    if (!mpScreenSpaceReSTIR.empty() && mpScreenSpaceReSTIR[0])
+        mpScreenSpaceReSTIR[0]->setOptions(mOptions);
 }
 
-Dictionary ScreenSpaceReSTIRPass::getScriptingDictionary()
+//Dictionary ScreenSpaceReSTIRPass::getScriptingDictionary()
+//{
+//    Dictionary d;
+//    d[kOptions] = *mOptions.get();// mpScreenSpaceReSTIR->getOptions();
+//    d[kNumReSTIRInstances] = mNumReSTIRInstances;
+//    return d;
+//}
+
+Properties ScreenSpaceReSTIRPass::getProperties() const
 {
-    Dictionary d;
-    d[kOptions] = *mOptions.get();// mpScreenSpaceReSTIR->getOptions();
-    d[kNumReSTIRInstances] = mNumReSTIRInstances;
-    return d;
+    Properties props;
+    props[kOptions] = mOptions;
+    return props;
 }
 
 RenderPassReflection ScreenSpaceReSTIRPass::reflect(const CompileData& compileData)
@@ -96,11 +131,11 @@ void ScreenSpaceReSTIRPass::compile(RenderContext* pRenderContext, const Compile
     mFrameDim = compileData.defaultTexDims;
 }
 
-void ScreenSpaceReSTIRPass::setScene(RenderContext* pRenderContext, const Scene::SharedPtr& pScene)
+void ScreenSpaceReSTIRPass::setScene(RenderContext* pRenderContext, const ref<Scene>& pScene)
 {
     mpScene = pScene;
-    mpPrepareSurfaceData = nullptr;
-    mpFinalShading = nullptr;
+    mpPrepareSurfaceDataPass = nullptr;
+    mpFinalShadingPass = nullptr;
 
     if (!mpScreenSpaceReSTIR.empty())
     {
@@ -110,32 +145,34 @@ void ScreenSpaceReSTIRPass::setScene(RenderContext* pRenderContext, const Scene:
 
     if (mpScene)
     {
-        if (is_set(pScene->getPrimitiveTypes(), PrimitiveTypeFlags::Procedural))
+        if (pScene->hasProceduralGeometry())
         {
             logError("This render pass does not support procedural primitives such as curves.");
         }
-
+        // mNumReSTIRInstances is 1
         mpScreenSpaceReSTIR.resize(mNumReSTIRInstances);
         for (int i = 0; i < mNumReSTIRInstances; i++)
         {
-            mpScreenSpaceReSTIR[i] = ScreenSpaceReSTIR::create(mpScene, mOptions, mNumReSTIRInstances, i);
+            mpScreenSpaceReSTIR[i] = std::make_unique<ScreenSpaceReSTIR>(mpScene, mOptions, mNumReSTIRInstances, i);
         }
     }
 }
 
 bool ScreenSpaceReSTIRPass::onMouseEvent(const MouseEvent& mouseEvent)
 {
-    return !mpScreenSpaceReSTIR.empty() && mpScreenSpaceReSTIR[0] ? mpScreenSpaceReSTIR[0]->getPixelDebug()->onMouseEvent(mouseEvent) : false;
+    return (!mpScreenSpaceReSTIR.empty() && mpScreenSpaceReSTIR[0])
+        ? mpScreenSpaceReSTIR[0]->getPixelDebug().onMouseEvent(mouseEvent)
+        : false;
 }
 
 
-void ScreenSpaceReSTIRPass::updateDict(const Dictionary& dict)
-{
-    parseDictionary(dict);
-    mOptionsChanged = true;
-    if (!mpScreenSpaceReSTIR.empty() && mpScreenSpaceReSTIR[0])
-        mpScreenSpaceReSTIR[0]->resetReservoirCount();
-}
+//void ScreenSpaceReSTIRPass::updateDict(const Dictionary& dict)
+//{
+//    parseDictionary(dict);
+//    mOptionsChanged = true;
+//    if (!mpScreenSpaceReSTIR.empty() && mpScreenSpaceReSTIR[0])
+//        mpScreenSpaceReSTIR[0]->resetReservoirCount();
+//}
 
 void ScreenSpaceReSTIRPass::execute(RenderContext* pRenderContext, const RenderData& renderData)
 {
@@ -218,86 +255,118 @@ void ScreenSpaceReSTIRPass::renderUI(Gui::Widgets& widget)
     {
         mOptionsChanged = mpScreenSpaceReSTIR[0]->renderUI(widget);
         for (int i = 1; i < mpScreenSpaceReSTIR.size(); i++)
+        {
             mpScreenSpaceReSTIR[i]->copyRecompileStateFromOtherInstance(mpScreenSpaceReSTIR[0]);
+        }
     }
 }
 
-void ScreenSpaceReSTIRPass::prepareSurfaceData(RenderContext* pRenderContext, const Texture::SharedPtr& pVBuffer, int instanceID)
+void ScreenSpaceReSTIRPass::prepareSurfaceData(RenderContext* pRenderContext, const ref<Texture>& pVBuffer, int instanceID)
 {
-    assert(!mpScreenSpaceReSTIR.empty() && mpScreenSpaceReSTIR[instanceID]);
+    FALCOR_ASSERT(!mpScreenSpaceReSTIR.empty());
+    FALCOR_ASSERT(pVBuffer);
+    FALCOR_ASSERT(mpScreenSpaceReSTIR[instanceID]);
+    //assert(!mpScreenSpaceReSTIR.empty() && mpScreenSpaceReSTIR[instanceID]);
 
-    PROFILE("prepareSurfaceData");
+    FALCOR_PROFILE(pRenderContext, "prepareSurfaceData");
 
-    if (!mpPrepareSurfaceData)
+    if (!mpPrepareSurfaceDataPass)
     {
+        ProgramDesc desc;
+        desc.addShaderModules(mpScene->getShaderModules());
+        desc.addShaderLibrary(kPrepareSurfaceDataFile).csEntry("main");
+        desc.addTypeConformances(mpScene->getTypeConformances());
+
         auto defines = mpScene->getSceneDefines();
         defines.add("GBUFFER_ADJUST_SHADING_NORMALS", mGBufferAdjustShadingNormals ? "1" : "0");
-        mpPrepareSurfaceData = ComputePass::create(kPrepareSurfaceDataFile, "main", defines, false);
-        mpPrepareSurfaceData->setVars(nullptr);
+        mpPrepareSurfaceDataPass = ComputePass::create(mpDevice, desc, defines, false);
+        // WHY do this?
+        mpPrepareSurfaceDataPass->setVars(nullptr);
     }
 
-    mpPrepareSurfaceData->addDefine("GBUFFER_ADJUST_SHADING_NORMALS", mGBufferAdjustShadingNormals ? "1" : "0");
+    mpPrepareSurfaceDataPass->addDefine("GBUFFER_ADJUST_SHADING_NORMALS", mGBufferAdjustShadingNormals ? "1" : "0");
 
-    mpPrepareSurfaceData["gScene"] = mpScene->getParameterBlock();
+    auto rootVar = mpPrepareSurfaceDataPass->getRootVar();
+    mpScene->bindShaderData(rootVar["gScene"]);
+    //mpPrepareSurfaceDataPass["gScene"] = mpScene->getParameterBlock();
 
-    auto var = mpPrepareSurfaceData["CB"]["gPrepareSurfaceData"];
+    auto var = rootVar["CB"]["gPrepareSurfaceData"];
 
     var["vbuffer"] = pVBuffer;
     var["frameDim"] = mFrameDim;
-    mpScreenSpaceReSTIR[instanceID]->setShaderData(var["screenSpaceReSTIR"]);
+    //mpScreenSpaceReSTIR[instanceID]->setShaderData(var["screenSpaceReSTIR"]);
+    mpScreenSpaceReSTIR[instanceID]->bindShaderData(var["screenSpaceReSTIR"]);
 
-    if (instanceID == 0 && mpFinalShading && mpScreenSpaceReSTIR[0]->mRequestParentRecompile)
+    if (instanceID == 0 && mpFinalShadingPass && mpScreenSpaceReSTIR[0]->mRequestParentRecompile)
     {
-        mpFinalShading->setVars(nullptr);
+        mpFinalShadingPass->setVars(nullptr);
         mpScreenSpaceReSTIR[0]->mRequestParentRecompile = false;
     }
 
-    mpPrepareSurfaceData->execute(pRenderContext, mFrameDim.x, mFrameDim.y);
+    mpPrepareSurfaceDataPass->execute(pRenderContext, mFrameDim.x, mFrameDim.y);
 }
 
-void ScreenSpaceReSTIRPass::finalShading(RenderContext* pRenderContext, const Texture::SharedPtr& pVBuffer, const RenderData& renderData, int instanceID)
+void ScreenSpaceReSTIRPass::finalShading(
+    RenderContext* pRenderContext,
+    const ref<Texture>& pVBuffer,
+    const RenderData& renderData,
+    int instanceID
+)
 {
-    assert(!mpScreenSpaceReSTIR.empty() && mpScreenSpaceReSTIR[instanceID]);
+    FALCOR_ASSERT(!mpScreenSpaceReSTIR.empty());
+    FALCOR_ASSERT(pVBuffer);
+    FALCOR_ASSERT(mpScreenSpaceReSTIR[instanceID]);
+    //assert(!mpScreenSpaceReSTIR.empty() && mpScreenSpaceReSTIR[instanceID]);
 
-    PROFILE("finalShading");
+    FALCOR_PROFILE(pRenderContext, "finalShading");
 
-    if (!mpFinalShading)
+    if (!mpFinalShadingPass)
     {
+        ProgramDesc desc;
+        desc.addShaderModules(mpScene->getShaderModules());
+        desc.addShaderLibrary(kFinalShadingFile).csEntry("main");
+        desc.addTypeConformances(mpScene->getTypeConformances());
+
         auto defines = mpScene->getSceneDefines();
         defines.add("GBUFFER_ADJUST_SHADING_NORMALS", mGBufferAdjustShadingNormals ? "1" : "0");
-        //defines.add("USE_ENV_BACKGROUND", mpScene->useEnvBackground() ? "1" : "0");
+        defines.add("USE_ENV_BACKGROUND", mpScene->useEnvBackground() ? "1" : "0");
         defines.add(getValidResourceDefines(kOutputChannels, renderData));
-        mpFinalShading = ComputePass::create(kFinalShadingFile, "main", defines, false);
-        mpFinalShading->setVars(nullptr);
+
+        mpFinalShadingPass = ComputePass::create(mpDevice, desc, defines, false);
+        // WHY
+        mpFinalShadingPass->setVars(nullptr);
     }
 
-    mpFinalShading->addDefine("GBUFFER_ADJUST_SHADING_NORMALS", mGBufferAdjustShadingNormals ? "1" : "0");
-    //mpFinalShading->addDefine("USE_ENV_BACKGROUND", mpScene->useEnvBackground() ? "1" : "0");
-    mpFinalShading->addDefine("_USE_LEGACY_SHADING_CODE", "0");
+    mpFinalShadingPass->addDefine("GBUFFER_ADJUST_SHADING_NORMALS", mGBufferAdjustShadingNormals ? "1" : "0");
+    mpFinalShadingPass->addDefine("USE_ENV_BACKGROUND", mpScene->useEnvBackground() ? "1" : "0");
+    mpFinalShadingPass->addDefine("_USE_LEGACY_SHADING_CODE", "0");
 
     // For optional I/O resources, set 'is_valid_<name>' defines to inform the program of which ones it can access.
     // TODO: This should be moved to a more general mechanism using Slang.
-    mpFinalShading->getProgram()->addDefines(getValidResourceDefines(kOutputChannels, renderData));
+    mpFinalShadingPass->getProgram()->addDefines(getValidResourceDefines(kOutputChannels, renderData));
 
-    mpFinalShading["gScene"] = mpScene->getParameterBlock();
+    //mpFinalShadingPass["gScene"] = mpScene->getParameterBlock();
+    auto rootVar = mpFinalShadingPass->getRootVar();
+    mpScene->bindShaderData(rootVar["gScene"]);
 
-    auto var = mpFinalShading["CB"]["gFinalShading"];
+    auto var = rootVar["CB"]["gFinalShading"];
 
     var["vbuffer"] = pVBuffer;
     var["frameDim"] = mFrameDim;
     var["numReSTIRInstances"] = mNumReSTIRInstances;
     var["ReSTIRInstanceID"] = instanceID;
 
-    mpScreenSpaceReSTIR[instanceID]->setShaderData(var["screenSpaceReSTIR"]);
+    //mpScreenSpaceReSTIR[instanceID]->setShaderDataPass(var["screenSpaceReSTIR"]);
+    mpScreenSpaceReSTIR[instanceID]->bindShaderData(var["screenSpaceReSTIR"]);
 
     // Bind output channels as UAV buffers.
-    var = mpFinalShading->getRootVar();
+    var = mpFinalShadingPass->getRootVar();
     auto bind = [&](const ChannelDesc& channel)
     {
-        Texture::SharedPtr pTex = renderData[channel.name]->asTexture();
+        ref<Texture> pTex = renderData[channel.name]->asTexture();
         var[channel.texname] = pTex;
     };
     for (const auto& channel : kOutputChannels) bind(channel);
 
-    mpFinalShading->execute(pRenderContext, mFrameDim.x, mFrameDim.y);
+    mpFinalShadingPass->execute(pRenderContext, mFrameDim.x, mFrameDim.y);
 }

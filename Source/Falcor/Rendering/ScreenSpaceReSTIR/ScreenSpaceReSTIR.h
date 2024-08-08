@@ -342,7 +342,7 @@ namespace Falcor
 
         void resetReservoirCount() { mRecompile = true; mFrameIndex = 0; };
 
-        void copyRecompileStateFromOtherInstance(ref<ScreenSpaceReSTIR> other)
+        void copyRecompileStateFromOtherInstance(std::unique_ptr<ScreenSpaceReSTIR>& other)
         {
             mRecompile = other->mRecompile;
             mRequestReallocate = other->mRequestReallocate;
