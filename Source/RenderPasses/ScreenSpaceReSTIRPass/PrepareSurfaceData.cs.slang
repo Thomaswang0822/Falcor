@@ -9,14 +9,15 @@
  **************************************************************************/
 import LoadShadingData;
 import Utils.Color.ColorHelpers;
-import Experimental.ScreenSpaceReSTIR.ScreenSpaceReSTIR;
+import Rendering.ScreenSpaceReSTIR.ScreenSpaceReSTIR;
 
 /** Prepares ReSTIR surface data.
+
+// Rewritten based on RTXDIPass/PrepareSurfaceData.cs.slang
 */
 struct PrepareSurfaceData
 {
     Texture2D<PackedHitInfo> vbuffer;
-
     ScreenSpaceReSTIR screenSpaceReSTIR;
 
     uint2 frameDim;
@@ -26,12 +27,32 @@ struct PrepareSurfaceData
         if (any(pixel >= frameDim)) return;
 
         ShadingData sd;
-        if (loadShadingData(pixel, frameDim, gScene.camera, vbuffer, sd))
+        let lod = ExplicitLodTextureSampler(0.f); // TODO: Implement texture level-of-detail.
+        bool isValidSurface = loadShadingData(pixel, frameDim, gScene.camera, vbuffer, lod, sd);
+
+        if (isValidSurface)
         {
+            // Create material instance and query its properties.
+            let hints = getMaterialInstanceHints();
+            let mi = gScene.materials.getMaterialInstance(sd, lod, hints);
+            let bsdfProperties = mi.getProperties(sd);
+
+            //// Very helpful comments copied from RTXDIPass to refactor code
+            // RTXDI uses a simple material model with only diffuse and specular reflection lobes.
+            // We query the BSDF for the diffuse albedo and specular reflectance, and use their luminances as weights.
+            // Note: Final shading uses the full material model, the simplified model is only used for resampling purposes.
+
             float depth = distance(gScene.camera.getPosition(), sd.posW);
-            float diffuseWeight = luminance(sd.diffuse);
-            float specularWeight = luminance(sd.specular);
-            screenSpaceReSTIR.setSurfaceData(pixel, sd.computeNewRayOrigin(), depth, sd.N, sd.faceN, diffuseWeight, specularWeight, sd.linearRoughness);
+            screenSpaceReSTIR.setSurfaceData(
+                pixel,
+                sd.computeRayOrigin(),
+                depth,
+                bsdfProperties.guideNormal,
+                sd.faceN,
+                luminance(bsdfProperties.diffuseReflectionAlbedo),
+                luminance(bsdfProperties.specularReflectance),
+                bsdfProperties.roughness
+            );
         }
         else
         {
@@ -40,6 +61,8 @@ struct PrepareSurfaceData
     }
 };
 
+/// Should it be updated to? If so, relevant lines in .h and .cpp should be modified.
+/// ParameterBlock<PrepareSurfaceData> gPrepareSurfaceData;
 cbuffer CB
 {
     PrepareSurfaceData gPrepareSurfaceData;

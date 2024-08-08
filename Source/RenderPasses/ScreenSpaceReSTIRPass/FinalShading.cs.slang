@@ -8,9 +8,12 @@
  # license agreement from NVIDIA CORPORATION is strictly prohibited.
  **************************************************************************/
 import LoadShadingData;
+import Scene.RaytracingInline;
 import Rendering.Materials.StandardMaterial;
-import Rendering.Materials.Microfacet;
-import Experimental.ScreenSpaceReSTIR.ScreenSpaceReSTIR;
+// import Rendering.Materials.Microfacet;
+import Rendering.Materials.IsotropicGGX;
+import Rendering.ScreenSpaceReSTIR.ScreenSpaceReSTIR;
+import Utils.Sampling.TinyUniformSampleGenerator;
 
 RWTexture2D<float4> gColor;
 RWTexture2D<float4> gEmission;
@@ -27,7 +30,7 @@ RWTexture2D<float4> gDebug;
 struct FinalShading
 {
     // Static configuration.
-    //static const bool kUseEnvBackground = USE_ENV_BACKGROUND;
+    static const bool kUseEnvBackground = USE_ENV_BACKGROUND;
 
     Texture2D<PackedHitInfo> vbuffer;
 
@@ -52,42 +55,70 @@ struct FinalShading
         float hitT = 10000.f; // TODO: Remove magic number also used in SpatioTemporalResampling pass.
 
         ShadingData sd;
-        if (loadShadingData(pixel, frameDim, gScene.camera, vbuffer, sd))
+        let lod = ExplicitLodTextureSampler(0.f); // TODO: Implement texture level-of-detail.
+        if (loadShadingData(pixel, frameDim, gScene.camera, vbuffer, lod, sd))
         {
-            // Get final sample from ReSTIR.
+            // Create material instance and query its properties.
+            let hints = getMaterialInstanceHints();
+            let mi = gScene.materials.getMaterialInstance(sd, lod, hints);
+            let bsdfProperties = mi.getProperties(sd);
 
+            // Get final sample from ReSTIR.
             float3 dir;
             float distance;
             float3 Li;
             bool valid = screenSpaceReSTIR.getFinalSample(pixel, dir, distance, Li);
 
+            // Check light visibility.
+            if (valid)
+            {
+                // Create a DXR 1.1 query object to trace a ray (the <1> means use alpha testing)
+                SceneRayQuery<1> rayQuery;
+                const Ray ray = Ray(sd.computeRayOrigin(), dir, 0.f, distance);
+                if (!rayQuery.traceVisibilityRay(ray, RAY_FLAG_NONE, 0xff))
+                {
+                    valid = false;
+                }
+
+                //sd.setActiveLobes((uint)LobeType::DiffuseReflection);
+                //diffuse = standardMaterial.eval(sd, dir) * Li;
+
+                //sd.setActiveLobes((uint)LobeType::SpecularReflection);
+                //specular = standardMaterial.eval(sd, dir) * Li;
+
+                //hitT = distance;
+            }
+
             // Evaluate diffuse and specular lobes.
             float3 diffuse = {};
             float3 specular = {};
-            if (valid)
-            {
-                sd.setActiveLobes((uint)LobeType::DiffuseReflection);
-                diffuse = standardMaterial.eval(sd, dir) * Li;
+            if (valid) {
+                TinyUniformSampleGenerator sg = TinyUniformSampleGenerator(pixel, gScreenSpaceReSTIR.frameIndex);
 
-                sd.setActiveLobes((uint)LobeType::SpecularReflection);
-                specular = standardMaterial.eval(sd, dir) * Li;
+                sd.mtl.setActiveLobes((uint)LobeType::DiffuseReflection);
+                diffuse = mi.eval(sd, dir, sg) * Li;
+
+                sd.mtl.setActiveLobes((uint)LobeType::SpecularReflection);
+                specular = mi.eval(sd, dir, sg) * Li;
 
                 hitT = distance;
             }
 
-            emission = sd.emissive;
-
-            color += diffuse + specular + emission;
+            //emission = sd.emissive;
+            emission = bsdfProperties.emission;
+            color = diffuse + specular + emission;  // should have been an = instead of +=, but shouldn't matter
 
             // Demodulate diffuse reflectance (albedo) from diffuse color.
-            diffuseReflectance += sd.diffuse;
-            float3 diffuseFactor = diffuseReflectance <= 0.f ? 0.f : 1.f / diffuseReflectance;
-            diffuseIllumination += diffuse * diffuseFactor;
+            diffuseReflectance = bsdfProperties.diffuseReflectionAlbedo;
+            float3 diffuseFactor = select(diffuseReflectance <= 0.f, 0.f, 1.f / diffuseReflectance);
+            diffuseIllumination = diffuse * diffuseFactor;
 
             // Demodulate preintegrated specular reflectance from specular color.
-            specularReflectance += approxSpecularIntegralGGX(sd.specular, sd.linearRoughness * sd.linearRoughness, sd.NdotV);
-            float3 specularFactor = specularReflectance <= 0.f ? 0.f : 1.f / specularReflectance;
-            specularIllumination += specular * specularFactor;
+            float NdotV = saturate(dot(bsdfProperties.guideNormal, sd.V));
+            float ggxAlpha = bsdfProperties.roughness * bsdfProperties.roughness;
+            specularReflectance = approxSpecularIntegralGGX(bsdfProperties.specularReflectance, ggxAlpha, NdotV);
+            float3 specularFactor = select(specularReflectance <= 0.f, 0.f, 1.f / specularReflectance);
+            specularIllumination = specular * specularFactor;
         }
         else
         {
@@ -103,6 +134,7 @@ struct FinalShading
 
         if (ReSTIRInstanceID == 0)
         {
+            // DI
             if (is_valid(gColor)) gColor[pixel] = float4(color, 1.f) / numReSTIRInstances;
             if (is_valid(gEmission)) gEmission[pixel] = float4(emission, 1.f) / numReSTIRInstances;
             if (is_valid(gDiffuseReflectance)) gDiffuseReflectance[pixel] = float4(diffuseReflectance, 1.f) / numReSTIRInstances;
@@ -112,6 +144,7 @@ struct FinalShading
         }
         else
         {
+            // GI
             if (is_valid(gColor)) gColor[pixel] += float4(color, 1.f) / numReSTIRInstances;
             if (is_valid(gEmission)) gEmission[pixel] += float4(emission, 1.f) / numReSTIRInstances;
             if (is_valid(gDiffuseReflectance)) gDiffuseReflectance[pixel] += float4(diffuseReflectance, 1.f) / numReSTIRInstances;

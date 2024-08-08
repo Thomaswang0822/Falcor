@@ -12,6 +12,18 @@ __exported import Scene.Shading;
 __exported import Scene.HitInfo;
 import Utils.Math.MathHelpers;
 
+/**
+ * Determine hints to use when creating the material instance.
+ */
+uint getMaterialInstanceHints()
+{
+    uint hints = 0;
+#if GBUFFER_ADJUST_SHADING_NORMALS
+    hints |= (uint)MaterialInstanceHints::AdjustShadingNormal;
+#endif
+    return hints;
+}
+
 /** Helper for setting up the ShadingData struct based on loaded data.
     \param[in] pixel Current pixel coordinates.
     \param[in] frameDim Frame dimensions in pixel.
@@ -19,12 +31,20 @@ import Utils.Math.MathHelpers;
     \param[in] vbuffer VBuffer texture.
     \param[out] sd ShadingData struct.
     \return True if the pixel has valid data (not a background pixel). Note sd.V is always valid.
+
+    Rewritten based on RTXDIPass/LoadShadingData.slang
 */
-bool loadShadingData(uint2 pixel, uint2 frameDim, const Camera camera, Texture2D<PackedHitInfo> vbuffer, out ShadingData sd)
-{
+bool loadShadingData(
+    const uint2 pixel,
+    const uint2 frameDim,
+    const Camera camera,
+    Texture2D<PackedHitInfo> vbuffer,
+    const ITextureSampler lod,
+    out ShadingData sd
+){
     sd = {};
 
-    float3 rayDir = camera.computeRayPinhole(pixel, frameDim).dir;
+    const float3 rayDir = camera.computeRayPinhole(pixel, frameDim).dir;
     bool valid = false;
 
     const HitInfo hit = HitInfo(vbuffer[pixel]);
@@ -36,12 +56,9 @@ bool loadShadingData(uint2 pixel, uint2 frameDim, const Camera camera, Texture2D
         // TODO: Implement texLOD to enable texture filtering in prepareShadingData().
         const VertexData v = gScene.getVertexData(triangleHit);
         const uint materialID = gScene.getMaterialID(triangleHit.instanceID);
-        sd = prepareShadingData(v, materialID, gScene.materials[materialID], gScene.materialResources[materialID], -rayDir, 0.f);
+        // sd = prepareShadingData(v, materialID, gScene.materials[materialID], gScene.materialResources[materialID], -rayDir, 0.f);
+        sd = gScene.materials.prepareShadingData(v, materialID, -rayDir, lod);
 
-        // Adjust shading normals if GBuffer pass has flag enabled.
-#if GBUFFER_ADJUST_SHADING_NORMALS
-        adjustShadingNormal(sd, v);
-#endif
         valid = true;
     }
 

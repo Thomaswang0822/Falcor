@@ -44,6 +44,7 @@ struct ScreenSpaceReSTIR
     StructuredBuffer<PackedGIReservoir> reservoirs;
 
     // Common parameters.
+    uint frameIndex; ///< Current frame index. Used to make sure we use different random numbers each frame.
     uint2 frameDim;
     uint giReservoirCount;
     uint _pad;
@@ -225,3 +226,7 @@ struct ScreenSpaceReSTIR
         avgWeight = reservoir.avgWeight;
     }
 };
+
+/// Copied from RTXDI.slang
+// We use global resources such that ScreenSpaceReSTIR can access them.
+ParameterBlock<ScreenSpaceReSTIR> gScreenSpaceReSTIR;
