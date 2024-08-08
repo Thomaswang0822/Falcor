@@ -37,10 +37,10 @@
 
 namespace
 {
-const std::string kGeneratePathsFilename = "RenderPasses/ReSTIRPT/GeneratePaths.cs.slang";
-const std::string kTracePassFilename = "RenderPasses/ReSTIRPT/TracePass.rt.slang";
-const std::string kResolvePassFilename = "RenderPasses/ReSTIRPT/ResolvePass.cs.slang";
-const std::string kReflectTypesFile = "RenderPasses/ReSTIRPT/ReflectTypes.cs.slang";
+const std::string kGeneratePathsFilename = "RenderPasses/ReSTIRPTPass/GeneratePaths.cs.slang";
+const std::string kTracePassFilename = "RenderPasses/ReSTIRPTPass/TracePass.rt.slang";
+const std::string kResolvePassFilename = "RenderPasses/ReSTIRPTPass/ResolvePass.cs.slang";
+const std::string kReflectTypesFile = "RenderPasses/ReSTIRPTPass/ReflectTypes.cs.slang";
 
 // Render pass inputs and outputs.
 const std::string kInputVBuffer = "vbuffer";
@@ -196,34 +196,34 @@ const std::string kColorFormat = "colorFormat";
 
 extern "C" FALCOR_API_EXPORT void registerPlugin(Falcor::PluginRegistry& registry)
 {
-    registry.registerClass<RenderPass, ReSTIRPT>();
-    ScriptBindings::registerBinding(ReSTIRPT::registerBindings);
+    registry.registerClass<RenderPass, ReSTIRPTPass>();
+    ScriptBindings::registerBinding(ReSTIRPTPass::registerBindings);
 }
 
-void ReSTIRPT::registerBindings(pybind11::module& m)
+void ReSTIRPTPass::registerBindings(pybind11::module& m)
 {
-    pybind11::class_<ReSTIRPT, RenderPass, ref<ReSTIRPT>> pass(m, "ReSTIRPT");
-    pass.def("reset", &ReSTIRPT::reset);
-    pass.def_property_readonly("pixelStats", &ReSTIRPT::getPixelStats);
+    pybind11::class_<ReSTIRPTPass, RenderPass, ref<ReSTIRPTPass>> pass(m, "ReSTIRPTPass");
+    pass.def("reset", &ReSTIRPTPass::reset);
+    pass.def_property_readonly("pixelStats", &ReSTIRPTPass::getPixelStats);
 
     pass.def_property(
         "useFixedSeed",
-        [](const ReSTIRPT* pt) { return pt->mParams.useFixedSeed ? true : false; },
-        [](ReSTIRPT* pt, bool value) { pt->mParams.useFixedSeed = value ? 1 : 0; }
+        [](const ReSTIRPTPass* pt) { return pt->mParams.useFixedSeed ? true : false; },
+        [](ReSTIRPTPass* pt, bool value) { pt->mParams.useFixedSeed = value ? 1 : 0; }
     );
     pass.def_property(
         "fixedSeed",
-        [](const ReSTIRPT* pt) { return pt->mParams.fixedSeed; },
-        [](ReSTIRPT* pt, uint32_t value) { pt->mParams.fixedSeed = value; }
+        [](const ReSTIRPTPass* pt) { return pt->mParams.fixedSeed; },
+        [](ReSTIRPTPass* pt, uint32_t value) { pt->mParams.fixedSeed = value; }
     );
 }
 
-ReSTIRPT::ReSTIRPT(ref<Device> pDevice, const Properties& props) : RenderPass(pDevice)
+ReSTIRPTPass::ReSTIRPTPass(ref<Device> pDevice, const Properties& props) : RenderPass(pDevice)
 {
     if (!mpDevice->isShaderModelSupported(ShaderModel::SM6_5))
-        FALCOR_THROW("ReSTIRPT requires Shader Model 6.5 support.");
+        FALCOR_THROW("ReSTIRPTPass requires Shader Model 6.5 support.");
     if (!mpDevice->isFeatureSupported(Device::SupportedFeatures::RaytracingTier1_1))
-        FALCOR_THROW("ReSTIRPT requires Raytracing Tier 1.1 support.");
+        FALCOR_THROW("ReSTIRPTPass requires Raytracing Tier 1.1 support.");
 
     mSERSupported = mpDevice->isFeatureSupported(Device::SupportedFeatures::ShaderExecutionReorderingAPI);
 
@@ -243,7 +243,7 @@ ReSTIRPT::ReSTIRPT(ref<Device> pDevice, const Properties& props) : RenderPass(pD
     mpPixelDebug = std::make_unique<PixelDebug>(mpDevice);
 }
 
-void ReSTIRPT::setProperties(const Properties& props)
+void ReSTIRPTPass::setProperties(const Properties& props)
 {
     parseProperties(props);
     validateOptions();
@@ -255,7 +255,7 @@ void ReSTIRPT::setProperties(const Properties& props)
     mOptionsChanged = true;
 }
 
-void ReSTIRPT::parseProperties(const Properties& props)
+void ReSTIRPTPass::parseProperties(const Properties& props)
 {
     for (const auto& [key, value] : props)
     {
@@ -335,7 +335,7 @@ void ReSTIRPT::parseProperties(const Properties& props)
             mStaticParams.colorFormat = value;
 
         else
-            logWarning("Unknown property '{}' in ReSTIRPT properties.", key);
+            logWarning("Unknown property '{}' in ReSTIRPTPass properties.", key);
     }
 
     if (props.has(kMaxSurfaceBounces))
@@ -372,7 +372,7 @@ void ReSTIRPT::parseProperties(const Properties& props)
     }
 }
 
-void ReSTIRPT::validateOptions()
+void ReSTIRPTPass::validateOptions()
 {
     if (mParams.specularRoughnessThreshold < 0.f || mParams.specularRoughnessThreshold > 1.f)
     {
@@ -419,7 +419,7 @@ void ReSTIRPT::validateOptions()
     }
 }
 
-Properties ReSTIRPT::getProperties() const
+Properties ReSTIRPTPass::getProperties() const
 {
     if (auto lightBVHSampler = dynamic_cast<LightBVHSampler*>(mpEmissiveSampler.get()))
     {
@@ -476,7 +476,7 @@ Properties ReSTIRPT::getProperties() const
     return props;
 }
 
-RenderPassReflection ReSTIRPT::reflect(const CompileData& compileData)
+RenderPassReflection ReSTIRPTPass::reflect(const CompileData& compileData)
 {
     RenderPassReflection reflector;
     const uint2 sz = RenderPassHelpers::calculateIOSize(mOutputSizeSelection, mFixedOutputSize, compileData.defaultTexDims);
@@ -486,7 +486,7 @@ RenderPassReflection ReSTIRPT::reflect(const CompileData& compileData)
     return reflector;
 }
 
-void ReSTIRPT::setFrameDim(const uint2 frameDim)
+void ReSTIRPTPass::setFrameDim(const uint2 frameDim)
 {
     auto prevFrameDim = mParams.frameDim;
     auto prevScreenTiles = mParams.screenTiles;
@@ -508,7 +508,7 @@ void ReSTIRPT::setFrameDim(const uint2 frameDim)
     }
 }
 
-void ReSTIRPT::setScene(RenderContext* pRenderContext, const ref<Scene>& pScene)
+void ReSTIRPTPass::setScene(RenderContext* pRenderContext, const ref<Scene>& pScene)
 {
     mpScene = pScene;
     mParams.frameCount = 0;
@@ -525,14 +525,14 @@ void ReSTIRPT::setScene(RenderContext* pRenderContext, const ref<Scene>& pScene)
     {
         if (pScene->hasGeometryType(Scene::GeometryType::Custom))
         {
-            logWarning("ReSTIRPT: This render pass does not support custom primitives.");
+            logWarning("ReSTIRPTPass: This render pass does not support custom primitives.");
         }
 
         validateOptions();
     }
 }
 
-void ReSTIRPT::execute(RenderContext* pRenderContext, const RenderData& renderData)
+void ReSTIRPTPass::execute(RenderContext* pRenderContext, const RenderData& renderData)
 {
     if (!beginFrame(pRenderContext, renderData))
         return;
@@ -575,7 +575,7 @@ void ReSTIRPT::execute(RenderContext* pRenderContext, const RenderData& renderDa
     endFrame(pRenderContext, renderData);
 }
 
-void ReSTIRPT::renderUI(Gui::Widgets& widget)
+void ReSTIRPTPass::renderUI(Gui::Widgets& widget)
 {
     bool dirty = false;
 
@@ -593,7 +593,7 @@ void ReSTIRPT::renderUI(Gui::Widgets& widget)
     }
 }
 
-bool ReSTIRPT::renderRenderingUI(Gui::Widgets& widget)
+bool ReSTIRPTPass::renderRenderingUI(Gui::Widgets& widget)
 {
     bool dirty = false;
     bool runtimeDirty = false;
@@ -771,7 +771,7 @@ bool ReSTIRPT::renderRenderingUI(Gui::Widgets& widget)
     return dirty || runtimeDirty;
 }
 
-bool ReSTIRPT::renderDebugUI(Gui::Widgets& widget)
+bool ReSTIRPTPass::renderDebugUI(Gui::Widgets& widget)
 {
     bool dirty = false;
 
@@ -793,7 +793,7 @@ bool ReSTIRPT::renderDebugUI(Gui::Widgets& widget)
     return dirty;
 }
 
-void ReSTIRPT::renderStatsUI(Gui::Widgets& widget)
+void ReSTIRPTPass::renderStatsUI(Gui::Widgets& widget)
 {
     if (auto g = widget.group("Statistics"))
     {
@@ -802,17 +802,17 @@ void ReSTIRPT::renderStatsUI(Gui::Widgets& widget)
     }
 }
 
-bool ReSTIRPT::onMouseEvent(const MouseEvent& mouseEvent)
+bool ReSTIRPTPass::onMouseEvent(const MouseEvent& mouseEvent)
 {
     return mpPixelDebug->onMouseEvent(mouseEvent);
 }
 
-void ReSTIRPT::reset()
+void ReSTIRPTPass::reset()
 {
     mParams.frameCount = 0;
 }
 
-ReSTIRPT::TracePass::TracePass(
+ReSTIRPTPass::TracePass::TracePass(
     ref<Device> pDevice,
     const std::string& name,
     const std::string& passDefine,
@@ -892,7 +892,7 @@ ReSTIRPT::TracePass::TracePass(
     pProgram = Program::create(pDevice, desc, defines);
 }
 
-void ReSTIRPT::TracePass::prepareProgram(ref<Device> pDevice, const DefineList& defines)
+void ReSTIRPTPass::TracePass::prepareProgram(ref<Device> pDevice, const DefineList& defines)
 {
     FALCOR_ASSERT(pProgram != nullptr && pBindingTable != nullptr);
     pProgram->setDefines(defines);
@@ -901,7 +901,7 @@ void ReSTIRPT::TracePass::prepareProgram(ref<Device> pDevice, const DefineList& 
     pVars = RtProgramVars::create(pDevice, pProgram, pBindingTable);
 }
 
-void ReSTIRPT::resetPrograms()
+void ReSTIRPTPass::resetPrograms()
 {
     mpTracePass = nullptr;
     mpTraceDeltaReflectionPass = nullptr;
@@ -912,7 +912,7 @@ void ReSTIRPT::resetPrograms()
     mRecompile = true;
 }
 
-void ReSTIRPT::updatePrograms()
+void ReSTIRPTPass::updatePrograms()
 {
     FALCOR_ASSERT(mpScene);
 
@@ -984,7 +984,7 @@ void ReSTIRPT::updatePrograms()
     mRecompile = false;
 }
 
-void ReSTIRPT::prepareResources(RenderContext* pRenderContext, const RenderData& renderData)
+void ReSTIRPTPass::prepareResources(RenderContext* pRenderContext, const RenderData& renderData)
 {
     // Compute allocation requirements for paths and output samples.
     // Note that the sample buffers are padded to whole tiles, while the max path count depends on actual frame dimension.
@@ -1095,7 +1095,7 @@ void ReSTIRPT::prepareResources(RenderContext* pRenderContext, const RenderData&
     }
 }
 
-void ReSTIRPT::prepareReSTIRPT(const RenderData& renderData)
+void ReSTIRPTPass::prepareReSTIRPT(const RenderData& renderData)
 {
     // Create path tracer parameter block if needed.
     if (!mpReSTIRPTBlock || mVarsChanged)
@@ -1111,7 +1111,7 @@ void ReSTIRPT::prepareReSTIRPT(const RenderData& renderData)
     bindShaderData(var, renderData);
 }
 
-void ReSTIRPT::resetLighting()
+void ReSTIRPTPass::resetLighting()
 {
     // Retain the options for the emissive sampler.
     if (auto lightBVHSampler = dynamic_cast<LightBVHSampler*>(mpEmissiveSampler.get()))
@@ -1124,7 +1124,7 @@ void ReSTIRPT::resetLighting()
     mRecompile = true;
 }
 
-void ReSTIRPT::prepareMaterials(RenderContext* pRenderContext)
+void ReSTIRPTPass::prepareMaterials(RenderContext* pRenderContext)
 {
     // This functions checks for scene changes that require shader recompilation.
     // Whenever materials or geometry is added/removed to the scene, we reset the shader programs to trigger
@@ -1137,7 +1137,7 @@ void ReSTIRPT::prepareMaterials(RenderContext* pRenderContext)
     }
 }
 
-bool ReSTIRPT::prepareLighting(RenderContext* pRenderContext)
+bool ReSTIRPTPass::prepareLighting(RenderContext* pRenderContext)
 {
     bool lightingChanged = false;
 
@@ -1237,7 +1237,7 @@ bool ReSTIRPT::prepareLighting(RenderContext* pRenderContext)
     return lightingChanged;
 }
 
-void ReSTIRPT::prepareRTXDI(RenderContext* pRenderContext)
+void ReSTIRPTPass::prepareRTXDI(RenderContext* pRenderContext)
 {
     if (mStaticParams.useRTXDI)
     {
@@ -1256,7 +1256,7 @@ void ReSTIRPT::prepareRTXDI(RenderContext* pRenderContext)
     }
 }
 
-void ReSTIRPT::setNRDData(const ShaderVar& var, const RenderData& renderData) const
+void ReSTIRPTPass::setNRDData(const ShaderVar& var, const RenderData& renderData) const
 {
     var["sampleRadiance"] = mpSampleNRDRadiance;
     var["sampleHitDist"] = mpSampleNRDHitDist;
@@ -1278,7 +1278,7 @@ void ReSTIRPT::setNRDData(const ShaderVar& var, const RenderData& renderData) co
     var["deltaTransmissionPosW"] = renderData.getTexture(kOutputNRDDeltaTransmissionPosW);
 }
 
-void ReSTIRPT::bindShaderData(const ShaderVar& var, const RenderData& renderData, bool useLightSampling) const
+void ReSTIRPTPass::bindShaderData(const ShaderVar& var, const RenderData& renderData, bool useLightSampling) const
 {
     // Bind static resources that don't change per frame.
     if (mVarsChanged)
@@ -1307,7 +1307,7 @@ void ReSTIRPT::bindShaderData(const ShaderVar& var, const RenderData& renderData
     {
         pSampleCount = renderData.getTexture(kInputSampleCount);
         if (!pSampleCount)
-            FALCOR_THROW("ReSTIRPT: Missing sample count input texture");
+            FALCOR_THROW("ReSTIRPTPass: Missing sample count input texture");
     }
 
     var["params"].setBlob(mParams);
@@ -1323,7 +1323,7 @@ void ReSTIRPT::bindShaderData(const ShaderVar& var, const RenderData& renderData
     }
 }
 
-bool ReSTIRPT::beginFrame(RenderContext* pRenderContext, const RenderData& renderData)
+bool ReSTIRPTPass::beginFrame(RenderContext* pRenderContext, const RenderData& renderData)
 {
     const auto& pOutputColor = renderData.getTexture(kOutputColor);
     FALCOR_ASSERT(pOutputColor);
@@ -1348,7 +1348,7 @@ bool ReSTIRPT::beginFrame(RenderContext* pRenderContext, const RenderData& rende
 
     if (mEnabled && resolutionMismatch)
     {
-        logError("ReSTIRPT I/O sizes don't match. The pass will be disabled.");
+        logError("ReSTIRPTPass I/O sizes don't match. The pass will be disabled.");
         mEnabled = false;
     }
 
@@ -1443,7 +1443,7 @@ bool ReSTIRPT::beginFrame(RenderContext* pRenderContext, const RenderData& rende
     return true;
 }
 
-void ReSTIRPT::endFrame(RenderContext* pRenderContext, const RenderData& renderData)
+void ReSTIRPTPass::endFrame(RenderContext* pRenderContext, const RenderData& renderData)
 {
     mpPixelStats->endFrame(pRenderContext);
     mpPixelDebug->endFrame(pRenderContext);
@@ -1474,7 +1474,7 @@ void ReSTIRPT::endFrame(RenderContext* pRenderContext, const RenderData& renderD
     mParams.frameCount++;
 }
 
-void ReSTIRPT::generatePaths(RenderContext* pRenderContext, const RenderData& renderData)
+void ReSTIRPTPass::generatePaths(RenderContext* pRenderContext, const RenderData& renderData)
 {
     FALCOR_PROFILE(pRenderContext, "generatePaths");
 
@@ -1509,7 +1509,7 @@ void ReSTIRPT::generatePaths(RenderContext* pRenderContext, const RenderData& re
     mpGeneratePaths->execute(pRenderContext, {mParams.screenTiles.x * tileSize, mParams.screenTiles.y, 1u});
 }
 
-void ReSTIRPT::tracePass(RenderContext* pRenderContext, const RenderData& renderData, TracePass& tracePass)
+void ReSTIRPTPass::tracePass(RenderContext* pRenderContext, const RenderData& renderData, TracePass& tracePass)
 {
     FALCOR_PROFILE(pRenderContext, tracePass.name);
 
@@ -1542,7 +1542,7 @@ void ReSTIRPT::tracePass(RenderContext* pRenderContext, const RenderData& render
     mpScene->raytrace(pRenderContext, tracePass.pProgram.get(), tracePass.pVars, uint3(mParams.frameDim, 1));
 }
 
-void ReSTIRPT::resolvePass(RenderContext* pRenderContext, const RenderData& renderData)
+void ReSTIRPTPass::resolvePass(RenderContext* pRenderContext, const RenderData& renderData)
 {
     if (!mOutputGuideData && !mOutputNRDData && mFixedSampleCount && mStaticParams.samplesPerPixel == 1)
         return;
@@ -1593,7 +1593,7 @@ void ReSTIRPT::resolvePass(RenderContext* pRenderContext, const RenderData& rend
     mpResolvePass->execute(pRenderContext, {mParams.frameDim, 1u});
 }
 
-DefineList ReSTIRPT::StaticParams::getDefines(const ReSTIRPT& owner) const
+DefineList ReSTIRPTPass::StaticParams::getDefines(const ReSTIRPTPass& owner) const
 {
     DefineList defines;
 

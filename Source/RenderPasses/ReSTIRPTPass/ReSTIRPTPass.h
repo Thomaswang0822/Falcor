@@ -48,18 +48,18 @@
 
 using namespace Falcor;
 
-/** ReSTIR-PT ReSTIRPT
+/** ReSTIR-PT ReSTIRPTPass
 */
-class ReSTIRPT : public RenderPass
+class ReSTIRPTPass : public RenderPass
 {
 public:
-    FALCOR_PLUGIN_CLASS(ReSTIRPT, "ReSTIRPT", "ReSTIR PT Pass");
+    FALCOR_PLUGIN_CLASS(ReSTIRPTPass, "ReSTIRPTPass", "ReSTIR PT Pass");
 
-    static ref<ReSTIRPT> create(ref<Device> pDevice, const Properties& props) {
-        return make_ref<ReSTIRPT>(pDevice, props);
+    static ref<ReSTIRPTPass> create(ref<Device> pDevice, const Properties& props) {
+        return make_ref<ReSTIRPTPass>(pDevice, props);
     }
 
-    ReSTIRPT(ref<Device> pDevice, const Properties& props);
+    ReSTIRPTPass(ref<Device> pDevice, const Properties& props);
 
     virtual void setProperties(const Properties& props) override;
     virtual Properties getProperties() const override;
@@ -159,7 +159,7 @@ private:
         // Denoising parameters
         bool useNRDDemodulation = true; ///< Global switch for NRD demodulation.
 
-        DefineList getDefines(const ReSTIRPT& owner) const;
+        DefineList getDefines(const ReSTIRPTPass& owner) const;
     };
 
     // Configuration
