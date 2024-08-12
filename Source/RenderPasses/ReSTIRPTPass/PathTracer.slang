@@ -848,8 +848,8 @@ struct PathTracer
     */
     bool traceVisibilityRay(const Ray ray)
     {
-        // TODO rename to PixelStatsRayType::Visibility
-        logTraceRay(PixelStatsRayType::Shadow);
+        // TODO rename to PixelStatsRayType::Visibility; DONE
+        logTraceRay(PixelStatsRayType::Visibility);
         SceneRayQuery<kUseAlphaTest> sceneRayQuery;
         return sceneRayQuery.traceVisibilityRay(ray.toRayDesc(), RAY_FLAG_NONE, 0xff);
     }

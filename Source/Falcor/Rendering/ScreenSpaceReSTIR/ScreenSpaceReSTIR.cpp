@@ -38,36 +38,36 @@ namespace Falcor
 
         const Gui::DropdownList kDebugOutputList =
         {
-            { (uint32_t)ScreenSpaceReSTIR::DebugOutput::Disabled, "Disabled" },
-            { (uint32_t)ScreenSpaceReSTIR::DebugOutput::Position, "Position" },
-            { (uint32_t)ScreenSpaceReSTIR::DebugOutput::Depth, "Depth" },
-            { (uint32_t)ScreenSpaceReSTIR::DebugOutput::Normal, "Normal" },
-            { (uint32_t)ScreenSpaceReSTIR::DebugOutput::FaceNormal, "FaceNormal" },
-            { (uint32_t)ScreenSpaceReSTIR::DebugOutput::DiffuseWeight, "DiffuseWeight" },
-            { (uint32_t)ScreenSpaceReSTIR::DebugOutput::SpecularWeight, "SpecularWeight" },
-            { (uint32_t)ScreenSpaceReSTIR::DebugOutput::SpecularRoughness, "SpecularRoughness" },
-            { (uint32_t)ScreenSpaceReSTIR::DebugOutput::PackedNormal, "PackedNormal" },
-            { (uint32_t)ScreenSpaceReSTIR::DebugOutput::PackedDepth, "PackedDepth" },
-            { (uint32_t)ScreenSpaceReSTIR::DebugOutput::InitialWeight, "InitialWeight" },
-            { (uint32_t)ScreenSpaceReSTIR::DebugOutput::TemporalReuse, "TemporalReuse" },
-            { (uint32_t)ScreenSpaceReSTIR::DebugOutput::SpatialReuse, "SpatialReuse" },
-            { (uint32_t)ScreenSpaceReSTIR::DebugOutput::FinalSampleDir, "FinalSampleDir" },
-            { (uint32_t)ScreenSpaceReSTIR::DebugOutput::FinalSampleDistance, "FinalSampleDistance" },
-            { (uint32_t)ScreenSpaceReSTIR::DebugOutput::FinalSampleLi, "FinalSampleLi" },
+            {(uint32_t)DebugOutput::Disabled, "Disabled"},
+            {(uint32_t)DebugOutput::Position, "Position"},
+            {(uint32_t)DebugOutput::Depth, "Depth"},
+            {(uint32_t)DebugOutput::Normal, "Normal"},
+            {(uint32_t)DebugOutput::FaceNormal, "FaceNormal"},
+            {(uint32_t)DebugOutput::DiffuseWeight, "DiffuseWeight"},
+            {(uint32_t)DebugOutput::SpecularWeight, "SpecularWeight"},
+            {(uint32_t)DebugOutput::SpecularRoughness, "SpecularRoughness"},
+            {(uint32_t)DebugOutput::PackedNormal, "PackedNormal"},
+            {(uint32_t)DebugOutput::PackedDepth, "PackedDepth"},
+            {(uint32_t)DebugOutput::InitialWeight, "InitialWeight"},
+            {(uint32_t)DebugOutput::TemporalReuse, "TemporalReuse"},
+            {(uint32_t)DebugOutput::SpatialReuse, "SpatialReuse"},
+            {(uint32_t)DebugOutput::FinalSampleDir, "FinalSampleDir"},
+            {(uint32_t)DebugOutput::FinalSampleDistance, "FinalSampleDistance"},
+            {(uint32_t)DebugOutput::FinalSampleLi, "FinalSampleLi"},
         };
 
         const Gui::DropdownList kReSTIRModeList =
         {
-            { (uint32_t)ScreenSpaceReSTIR::ReSTIRMode::InputOnly, "Input Only" },
-            { (uint32_t)ScreenSpaceReSTIR::ReSTIRMode::TemporalOnly, "Temporal Reuse Only" },
-            { (uint32_t)ScreenSpaceReSTIR::ReSTIRMode::TemporalAndBiasedSpatial, "Temporal + Biased Spatial Reuse" },
-            { (uint32_t)ScreenSpaceReSTIR::ReSTIRMode::TemporalAndUnbiasedSpatial, "Temporal + Unbiased Spatial Reuse" },
+            { (uint32_t)ReSTIRMode::InputOnly, "Input Only" },
+            { (uint32_t)ReSTIRMode::TemporalOnly, "Temporal Reuse Only" },
+            { (uint32_t)ReSTIRMode::TemporalAndBiasedSpatial, "Temporal + Biased Spatial Reuse" },
+            { (uint32_t)ReSTIRMode::TemporalAndUnbiasedSpatial, "Temporal + Unbiased Spatial Reuse" },
         };
 
         const Gui::DropdownList kTargetPdfList =
         {
-            { (uint32_t)ScreenSpaceReSTIR::TargetPDF::IncomingRadiance, "Incoming Radiance" },
-            { (uint32_t)ScreenSpaceReSTIR::TargetPDF::OutgoingRadiance, "Outgoing Radiance" },
+            { (uint32_t)TargetPDF::IncomingRadiance, "Incoming Radiance" },
+            { (uint32_t)TargetPDF::OutgoingRadiance, "Outgoing Radiance" },
         };
 
         const Gui::DropdownList kSpatialReusePatternList =

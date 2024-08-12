@@ -268,7 +268,7 @@ struct Lights
             {
                 const EmissiveTriangle tri = gScene.lightCollection.getTriangle(lightSample.getEmissiveIndex());
                 float2 texCoord = tri.getTexCoord(lightSample.getEmissiveBarycentrics());
-                result.emission = luminance(gScene.getEmissive(tri.materialID, texCoord, gScene.materialResources[tri.materialID]));
+                result.emission = luminance(gScene.materials.evalEmissive(tri.materialID, texCoord));
             }
         }
         else
@@ -286,7 +286,7 @@ struct Lights
             if (kUseEmissiveTextureForSampling)
             {
                 float2 texCoord = tri.getTexCoord(lightSample.getEmissiveBarycentrics());
-                result.emission = luminance(gScene.getEmissive(tri.materialID, texCoord, gScene.materialResources[tri.materialID]));
+                result.emission = luminance(gScene.materials.evalEmissive(tri.materialID, texCoord));
             }
         }
 
@@ -389,7 +389,7 @@ struct Lights
         if (kUseEmissiveTextureForShading)
         {
             float2 texCoord = tri.getTexCoord(lightSample.getEmissiveBarycentrics());
-            return gScene.getEmissive(tri.materialID, texCoord, gScene.materialResources[tri.materialID]);
+            return gScene.materials.evalEmissive(tri.materialID, texCoord);
         }
         else
         {

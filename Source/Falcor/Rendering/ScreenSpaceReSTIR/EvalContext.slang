@@ -13,6 +13,7 @@ __exported import Scene.HitInfo;
 import Scene.Shading;
 import Utils.Math.MathHelpers;
 import Rendering.Materials.Microfacet;
+import Rendering.Materials.IsotropicGGX;
 import Rendering.Materials.Fresnel;
 import Lights;
 __exported import SurfaceData;
@@ -53,7 +54,10 @@ struct EvalContext
         evalContext.diffuseSpecularMix = weightSum > 1e-7f ? (surfaceData.diffuseWeight / weightSum) : 1.f;
         // Clamp roughness to avoid numerical instability when evaluating the GGX lobe.
         // This is the same threshold as used in the legacy Falcor BRDF.
-        float roughness = max(ROUGHNESS_THRESHOLD, surfaceData.specularRoughness);
+
+        /// float roughness = max(ROUGHNESS_THRESHOLD, surfaceData.specularRoughness);
+        /// @see PathTracer/NRDHelpers.slang line 198
+        float roughness = surfaceData.specularRoughness < 0.08f ? 0.00f : surfaceData.specularRoughness;
         evalContext.ggxAlpha = roughness * roughness;
         evalContext.lobes = surfaceData.lobes;
         evalContext.valid = surfaceData.isValid();
@@ -203,7 +207,7 @@ struct EvalContext
     */
     float evalVisibility(const EvaluatedLightSample evaluatedLightSample)
     {
-        RayDesc ray = { pos, 0.f, evaluatedLightSample.dir, max(0.f, evaluatedLightSample.distance - Lights::kRayEpsilon) };
+        Ray ray = { pos, 0.f, evaluatedLightSample.dir, max(0.f, evaluatedLightSample.distance - Lights::kRayEpsilon) };
         SceneRayQuery<kUseAlphaTest> sceneRayQuery;
         return sceneRayQuery.traceVisibilityRay(ray, RAY_FLAG_NONE, 0xff) ? 1.f : 0.f;
     }
@@ -222,7 +226,7 @@ struct EvalContext
         \param[out] hit Hit info.
         \return Returns true on hit.
     */
-    bool traceRay(const RayDesc ray, out HitInfo hit)
+    bool traceRay(const Ray ray, out HitInfo hit)
     {
         SceneRayQuery<kUseAlphaTest> sceneRayQuery;
         float hitT;

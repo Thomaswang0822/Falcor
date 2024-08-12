@@ -57,7 +57,8 @@ namespace Falcor
         /** Enumeration of available debug outputs.
             Note: Keep in sync with definition in Params.slang
         */
-        enum class DebugOutput
+        /*
+        enum class DebugOutput : uint32_t
         {
             Disabled,
             Position,
@@ -95,9 +96,10 @@ namespace Falcor
             {DebugOutput::FinalSampleDistance, "FinalSampleDistance"},
             {DebugOutput::FinalSampleLi, "FinalSampleLi"},
         });
+        */
 
-
-        enum class ReSTIRMode
+        /*
+        enum class ReSTIRMode : uint32_t
         {
             InputOnly = 0,
             TemporalOnly = 1,
@@ -111,17 +113,7 @@ namespace Falcor
             { ReSTIRMode::TemporalAndBiasedSpatial, "TemporalAndBiasedSpatial" },
             { ReSTIRMode::TemporalAndUnbiasedSpatial, "TemporalAndUnbiasedSpatial" },
         });
-
-        enum class TargetPDF
-        {
-            IncomingRadiance = 0,
-            OutgoingRadiance = 1
-        };
-
-        FALCOR_ENUM_INFO(TargetPDF, {
-            { TargetPDF::IncomingRadiance, "IncomingRadiance" },
-            { TargetPDF::OutgoingRadiance, "OutgoingRadiance" },
-        });
+        */
 
         /** Configuration options.
         */

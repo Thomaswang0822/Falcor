@@ -44,14 +44,7 @@ import Rendering.Materials.StandardMaterial;
 
 
 struct GIResampling
-{
-    enum class ReSTIRMode
-    {
-        InputOnly                   = 0,    ///< Output input samples directly.
-        TemporalOnly                = 1,    ///< Output temporal reuse result.
-        TemporalAndBiasedSpatial    = 2,    ///< Output temporal followed by biased spatial reuse result.
-        TemporalAndUnbiasedSpatial  = 3     ///< Output temporal followed by unbiased spatial reuse result.
-    };
+{    
 
     // Static configuration.
     static const bool kUseAlphaTest = USE_ALPHA_TEST;
