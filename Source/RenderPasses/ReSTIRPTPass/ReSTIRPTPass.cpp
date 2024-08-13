@@ -37,162 +37,130 @@
 
 namespace
 {
-const std::string kGeneratePathsFilename = "RenderPasses/ReSTIRPTPass/GeneratePaths.cs.slang";
-const std::string kTracePassFilename = "RenderPasses/ReSTIRPTPass/TracePass.rt.slang";
-const std::string kResolvePassFilename = "RenderPasses/ReSTIRPTPass/ResolvePass.cs.slang";
-const std::string kReflectTypesFile = "RenderPasses/ReSTIRPTPass/ReflectTypes.cs.slang";
+    const std::string kGeneratePathsFilename = "RenderPasses/ReSTIRPTPass/GeneratePaths.cs.slang";
+    const std::string kTracePassFilename = "RenderPasses/ReSTIRPTPass/TracePass.cs.slang";
+    const std::string kReflectTypesFile = "RenderPasses/ReSTIRPTPass/ReflectTypes.cs.slang";
+    const std::string kSpatialReusePassFile = "RenderPasses/ReSTIRPTPass/SpatialReuse.cs.slang";
+    const std::string kTemporalReusePassFile = "RenderPasses/ReSTIRPTPass/TemporalReuse.cs.slang";
+    const std::string kSpatialPathRetraceFile = "RenderPasses/ReSTIRPTPass/SpatialPathRetrace.cs.slang";
+    const std::string kTemporalPathRetraceFile = "RenderPasses/ReSTIRPTPass/TemporalPathRetrace.cs.slang";
+    const std::string kComputePathReuseMISWeightsFile = "RenderPasses/ReSTIRPTPass/ComputePathReuseMISWeights.cs.slang";
 
-// Render pass inputs and outputs.
-const std::string kInputVBuffer = "vbuffer";
-const std::string kInputMotionVectors = "mvec";
-const std::string kInputViewDir = "viewW";
-const std::string kInputSampleCount = "sampleCount";
+    // Render pass inputs and outputs.
+    const std::string kInputVBuffer = "vbuffer";
+    const std::string kInputMotionVectors = "motionVectors";
+    const std::string kInputDirectLighting = "directLighting";
 
-const Falcor::ChannelList kInputChannels = {
-    {kInputVBuffer, "gVBuffer", "Visibility buffer in packed format"},
-    {kInputMotionVectors, "gMotionVectors", "Motion vector buffer (float format)", true /* optional */},
-    {kInputViewDir, "gViewW", "World-space view direction (xyz float format)", true /* optional */},
-    {kInputSampleCount, "gSampleCount", "Sample count buffer (integer format)", true /* optional */, ResourceFormat::R8Uint},
-};
+    const Falcor::ChannelList kInputChannels =
+    {
+        { kInputVBuffer,        "gVBuffer",         "Visibility buffer in packed format", false, ResourceFormat::Unknown },
+        { kInputMotionVectors,  "gMotionVectors",   "Motion vector buffer (float format)", true /* optional */, ResourceFormat::RG32Float },
+        { kInputDirectLighting,    "gDirectLighting",     "Sample count buffer (integer format)", true /* optional */, ResourceFormat::RGBA32Float },
+    };
 
-const std::string kOutputColor = "color";
-const std::string kOutputAlbedo = "albedo";
-const std::string kOutputSpecularAlbedo = "specularAlbedo";
-const std::string kOutputIndirectAlbedo = "indirectAlbedo";
-const std::string kOutputGuideNormal = "guideNormal";
-const std::string kOutputReflectionPosW = "reflectionPosW";
-const std::string kOutputRayCount = "rayCount";
-const std::string kOutputPathLength = "pathLength";
-const std::string kOutputNRDDiffuseRadianceHitDist = "nrdDiffuseRadianceHitDist";
-const std::string kOutputNRDSpecularRadianceHitDist = "nrdSpecularRadianceHitDist";
-const std::string kOutputNRDEmission = "nrdEmission";
-const std::string kOutputNRDDiffuseReflectance = "nrdDiffuseReflectance";
-const std::string kOutputNRDSpecularReflectance = "nrdSpecularReflectance";
-const std::string kOutputNRDDeltaReflectionRadianceHitDist = "nrdDeltaReflectionRadianceHitDist";
-const std::string kOutputNRDDeltaReflectionReflectance = "nrdDeltaReflectionReflectance";
-const std::string kOutputNRDDeltaReflectionEmission = "nrdDeltaReflectionEmission";
-const std::string kOutputNRDDeltaReflectionNormWRoughMaterialID = "nrdDeltaReflectionNormWRoughMaterialID";
-const std::string kOutputNRDDeltaReflectionPathLength = "nrdDeltaReflectionPathLength";
-const std::string kOutputNRDDeltaReflectionHitDist = "nrdDeltaReflectionHitDist";
-const std::string kOutputNRDDeltaTransmissionRadianceHitDist = "nrdDeltaTransmissionRadianceHitDist";
-const std::string kOutputNRDDeltaTransmissionReflectance = "nrdDeltaTransmissionReflectance";
-const std::string kOutputNRDDeltaTransmissionEmission = "nrdDeltaTransmissionEmission";
-const std::string kOutputNRDDeltaTransmissionNormWRoughMaterialID = "nrdDeltaTransmissionNormWRoughMaterialID";
-const std::string kOutputNRDDeltaTransmissionPathLength = "nrdDeltaTransmissionPathLength";
-const std::string kOutputNRDDeltaTransmissionPosW = "nrdDeltaTransmissionPosW";
-const std::string kOutputNRDResidualRadianceHitDist = "nrdResidualRadianceHitDist";
+    const std::string kOutputColor = "color";
+    const std::string kOutputAlbedo = "albedo";
+    const std::string kOutputSpecularAlbedo = "specularAlbedo";
+    const std::string kOutputIndirectAlbedo = "indirectAlbedo";
+    const std::string kOutputNormal = "normal";
+    const std::string kOutputReflectionPosW = "reflectionPosW";
+    const std::string kOutputRayCount = "rayCount";
+    const std::string kOutputPathLength = "pathLength";
+    const std::string kOutputDebug = "debug";
+    const std::string kOutputTime = "time";
+    const std::string kOutputNRDDiffuseRadianceHitDist = "nrdDiffuseRadianceHitDist";
+    const std::string kOutputNRDSpecularRadianceHitDist = "nrdSpecularRadianceHitDist";
+    const std::string kOutputNRDResidualRadianceHitDist = "nrdResidualRadianceHitDist";
+    const std::string kOutputNRDEmission = "nrdEmission";
+    const std::string kOutputNRDDiffuseReflectance = "nrdDiffuseReflectance";
+    const std::string kOutputNRDSpecularReflectance = "nrdSpecularReflectance";
 
-const Falcor::ChannelList kOutputChannels = {
-    {kOutputColor, "", "Output color (linear)", true /* optional */, ResourceFormat::RGBA32Float},
-    {kOutputAlbedo, "", "Output albedo (linear)", true /* optional */, ResourceFormat::RGBA8Unorm},
-    {kOutputSpecularAlbedo, "", "Output specular albedo (linear)", true /* optional */, ResourceFormat::RGBA8Unorm},
-    {kOutputIndirectAlbedo, "", "Output indirect albedo (linear)", true /* optional */, ResourceFormat::RGBA8Unorm},
-    {kOutputGuideNormal, "", "Output guide normal (linear)", true /* optional */, ResourceFormat::RGBA16Float},
-    {kOutputReflectionPosW, "", "Output reflection pos (world space)", true /* optional */, ResourceFormat::RGBA32Float},
-    {kOutputRayCount, "", "Per-pixel ray count", true /* optional */, ResourceFormat::R32Uint},
-    {kOutputPathLength, "", "Per-pixel path length", true /* optional */, ResourceFormat::R32Uint},
-    // NRD outputs
-    {kOutputNRDDiffuseRadianceHitDist,
-     "",
-     "Output demodulated diffuse color (linear) and hit distance",
-     true /* optional */,
-     ResourceFormat::RGBA32Float},
-    {kOutputNRDSpecularRadianceHitDist,
-     "",
-     "Output demodulated specular color (linear) and hit distance",
-     true /* optional */,
-     ResourceFormat::RGBA32Float},
-    {kOutputNRDEmission, "", "Output primary surface emission", true /* optional */, ResourceFormat::RGBA32Float},
-    {kOutputNRDDiffuseReflectance, "", "Output primary surface diffuse reflectance", true /* optional */, ResourceFormat::RGBA16Float},
-    {kOutputNRDSpecularReflectance, "", "Output primary surface specular reflectance", true /* optional */, ResourceFormat::RGBA16Float},
-    {kOutputNRDDeltaReflectionRadianceHitDist,
-     "",
-     "Output demodulated delta reflection color (linear)",
-     true /* optional */,
-     ResourceFormat::RGBA32Float},
-    {kOutputNRDDeltaReflectionReflectance,
-     "",
-     "Output delta reflection reflectance color (linear)",
-     true /* optional */,
-     ResourceFormat::RGBA16Float},
-    {kOutputNRDDeltaReflectionEmission,
-     "",
-     "Output delta reflection emission color (linear)",
-     true /* optional */,
-     ResourceFormat::RGBA32Float},
-    {kOutputNRDDeltaReflectionNormWRoughMaterialID,
-     "",
-     "Output delta reflection world normal, roughness, and material ID",
-     true /* optional */,
-     ResourceFormat::RGB10A2Unorm},
-    {kOutputNRDDeltaReflectionPathLength, "", "Output delta reflection path length", true /* optional */, ResourceFormat::R16Float},
-    {kOutputNRDDeltaReflectionHitDist, "", "Output delta reflection hit distance", true /* optional */, ResourceFormat::R16Float},
-    {kOutputNRDDeltaTransmissionRadianceHitDist,
-     "",
-     "Output demodulated delta transmission color (linear)",
-     true /* optional */,
-     ResourceFormat::RGBA32Float},
-    {kOutputNRDDeltaTransmissionReflectance,
-     "",
-     "Output delta transmission reflectance color (linear)",
-     true /* optional */,
-     ResourceFormat::RGBA16Float},
-    {kOutputNRDDeltaTransmissionEmission,
-     "",
-     "Output delta transmission emission color (linear)",
-     true /* optional */,
-     ResourceFormat::RGBA32Float},
-    {kOutputNRDDeltaTransmissionNormWRoughMaterialID,
-     "",
-     "Output delta transmission world normal, roughness, and material ID",
-     true /* optional */,
-     ResourceFormat::RGB10A2Unorm},
-    {kOutputNRDDeltaTransmissionPathLength, "", "Output delta transmission path length", true /* optional */, ResourceFormat::R16Float},
-    {kOutputNRDDeltaTransmissionPosW, "", "Output delta transmission position", true /* optional */, ResourceFormat::RGBA32Float},
-    {kOutputNRDResidualRadianceHitDist,
-     "",
-     "Output residual color (linear) and hit distance",
-     true /* optional */,
-     ResourceFormat::RGBA32Float},
-};
 
-// Scripting options.
-const std::string kSamplesPerPixel = "samplesPerPixel";
-const std::string kMaxSurfaceBounces = "maxSurfaceBounces";
-const std::string kMaxDiffuseBounces = "maxDiffuseBounces";
-const std::string kMaxSpecularBounces = "maxSpecularBounces";
-const std::string kMaxTransmissionBounces = "maxTransmissionBounces";
+    const Falcor::ChannelList kOutputChannels =
+    {
+        { kOutputColor,                 "gOutputColor",                 "Output color (linear)", true /* optional */ },
+        { kOutputAlbedo,                "gOutputAlbedo",                "Output albedo (linear)", true /* optional */, ResourceFormat::RGBA8Unorm },
+        { kOutputNormal,                "gOutputNormal",                "Output normal (linear)", true /* optional */, ResourceFormat::RGBA16Float },
+        { kOutputRayCount,              "",                             "Per-pixel ray count", true /* optional */, ResourceFormat::R32Uint },
+        { kOutputPathLength,            "",                             "Per-pixel path length", true /* optional */, ResourceFormat::R32Uint },
+        { kOutputDebug,                 "",                             "Debug output", true /* optional */, ResourceFormat::RGBA32Float },
+        { kOutputTime,                  "",                             "Per-pixel time", true /* optional */, ResourceFormat::R32Uint },
+        { kOutputSpecularAlbedo,                "gOutputSpecularAlbedo",                "Output specular albedo (linear)", true /* optional */, ResourceFormat::RGBA8Unorm },
+        { kOutputIndirectAlbedo,                "gOutputIndirectAlbedo",                "Output indirect albedo (linear)", true /* optional */, ResourceFormat::RGBA8Unorm },
+        { kOutputReflectionPosW,                "gOutputReflectionPosW",                "Output reflection pos (world space)", true /* optional */, ResourceFormat::RGBA32Float },
+        { kOutputNRDDiffuseRadianceHitDist,     "gOutputNRDDiffuseRadianceHitDist",     "Output demodulated diffuse color (linear) and hit distance", true /* optional */, ResourceFormat::RGBA32Float },
+        { kOutputNRDSpecularRadianceHitDist,    "gOutputNRDSpecularRadianceHitDist",    "Output demodulated specular color (linear) and hit distance", true /* optional */, ResourceFormat::RGBA32Float },
+        { kOutputNRDResidualRadianceHitDist,    "gOutputNRDResidualRadianceHitDist",    "Output residual color (linear) and hit distance", true /* optional */, ResourceFormat::RGBA32Float },
+        { kOutputNRDEmission,                   "gOutputNRDEmission",                   "Output primary surface emission", true /* optional */, ResourceFormat::RGBA32Float },
+        { kOutputNRDDiffuseReflectance,         "gOutputNRDDiffuseReflectance",         "Output primary surface diffuse reflectance", true /* optional */, ResourceFormat::RGBA16Float },
+        { kOutputNRDSpecularReflectance,        "gOutputNRDSpecularReflectance",        "Output primary surface specular reflectance", true /* optional */, ResourceFormat::RGBA16Float },
+    };
 
-const std::string kSampleGenerator = "sampleGenerator";
-const std::string kFixedSeed = "fixedSeed";
-const std::string kUseBSDFSampling = "useBSDFSampling";
-const std::string kUseRussianRoulette = "useRussianRoulette";
-const std::string kUseNEE = "useNEE";
-const std::string kUseMIS = "useMIS";
-const std::string kMISHeuristic = "misHeuristic";
-const std::string kMISPowerExponent = "misPowerExponent";
-const std::string kEmissiveSampler = "emissiveSampler";
-const std::string kLightBVHOptions = "lightBVHOptions";
-const std::string kUseRTXDI = "useRTXDI";
-const std::string kRTXDIOptions = "RTXDIOptions";
+    // UI variables.
+    // TODO: look at PathTracer.cpp and see if those Gui::DropdownList can be put here.
 
-const std::string kUseAlphaTest = "useAlphaTest";
-const std::string kAdjustShadingNormals = "adjustShadingNormals";
-const std::string kMaxNestedMaterials = "maxNestedMaterials";
-const std::string kUseLightsInDielectricVolumes = "useLightsInDielectricVolumes";
-const std::string kDisableCaustics = "disableCaustics";
-const std::string kSpecularRoughnessThreshold = "specularRoughnessThreshold";
-const std::string kPrimaryLodMode = "primaryLodMode";
-const std::string kLODBias = "lodBias";
+    // Scripting options.
+    const std::string kSamplesPerPixel = "samplesPerPixel";
+    const std::string kMaxSurfaceBounces = "maxSurfaceBounces";
+    const std::string kMaxDiffuseBounces = "maxDiffuseBounces";
+    const std::string kMaxSpecularBounces = "maxSpecularBounces";
+    const std::string kMaxTransmissionBounces = "maxTransmissionBounces";
+    const std::string kAdjustShadingNormals = "adjustShadingNormals";
+    const std::string kLODBias = "lodBias";
+    const std::string kSampleGenerator = "sampleGenerator";
+    const std::string kUseBSDFSampling = "useBSDFSampling";
+    const std::string kUseNEE = "useNEE";
+    const std::string kUseMIS = "useMIS";
+    const std::string kUseRussianRoulette = "useRussianRoulette";
+    const std::string kScreenSpaceReSTIROptions = "screenSpaceReSTIROptions";
+    const std::string kUseAlphaTest = "useAlphaTest";
+    const std::string kMaxNestedMaterials = "maxNestedMaterials";
+    const std::string kUseLightsInDielectricVolumes = "useLightsInDielectricVolumes";
+    const std::string kLimitTransmission = "limitTransmission";
+    const std::string kMaxTransmissionReflectionDepth = "maxTransmissionReflectionDepth";
+    const std::string kMaxTransmissionRefractionDepth = "maxTransmissionRefractionDepth";
+    const std::string kDisableCaustics = "disableCaustics";
+    const std::string kSpecularRoughnessThreshold = "specularRoughnessThreshold";
+    const std::string kDisableDirectIllumination = "disableDirectIllumination";
+    const std::string kColorFormat = "colorFormat";
+    const std::string kMISHeuristic = "misHeuristic";
+    const std::string kMISPowerExponent = "misPowerExponent";
+    const std::string kFixedSeed = "fixedSeed";
+    const std::string kEmissiveSampler = "emissiveSampler";
+    const std::string kLightBVHOptions = "lightBVHOptions";
+    const std::string kPrimaryLodMode = "primaryLodMode";
+    const std::string kUseNRDDemodulation = "useNRDDemodulation";
 
-const std::string kUseNRDDemodulation = "useNRDDemodulation";
+    const std::string kSpatialMisKind = "spatialMisKind";
+    const std::string kTemporalMisKind = "temporalMisKind";
+    const std::string kShiftStrategy = "shiftStrategy";
+    const std::string kRejectShiftBasedOnJacobian = "rejectShiftBasedOnJacobian";
+    const std::string kJacobianRejectionThreshold = "jacobianRejectionThreshold";
+    const std::string kNearFieldDistance = "nearFieldDistance";
+    const std::string kLocalStrategyType = "localStrategyType";
 
-const std::string kUseSER = "useSER";
+    const std::string kTemporalHistoryLength = "temporalHistoryLength";
+    const std::string kUseMaxHistory = "useMaxHistory";
+    const std::string kSeedOffset = "seedOffset";
+    const std::string kEnableTemporalReuse = "enableTemporalReuse";
+    const std::string kEnableSpatialReuse = "enableSpatialReuse";
+    const std::string kNumSpatialRounds = "numSpatialRounds";
+    const std::string kPathSamplingMode = "pathSamplingMode";
+    const std::string kEnableTemporalReprojection = "enableTemporalReprojection";
+    const std::string kNoResamplingForTemporalReuse = "noResamplingForTemporalReuse";
+    const std::string kSpatialNeighborCount = "spatialNeighborCount";
+    const std::string kFeatureBasedRejection = "featureBasedRejection";
+    const std::string kSpatialReusePattern = "spatialReusePattern";
+    const std::string kSmallWindowRestirWindowRadius = "smallWindowRestirWindowRadius";
+    const std::string kSpatialReuseRadius = "spatialReuseRadius";
+    const std::string kUseDirectLighting = "useDirectLighting";
+    const std::string kSeparatePathBSDF = "separatePathBSDF";
+    const std::string kCandidateSamples = "candidateSamples";
+    const std::string kTemporalUpdateForDynamicScene = "temporalUpdateForDynamicScene";
+    const std::string kEnableRayStats = "enableRayStats";
 
-const std::string kOutputSize = "outputSize";
-const std::string kFixedOutputSize = "fixedOutputSize";
-const std::string kColorFormat = "colorFormat";
-} // namespace
+    const uint32_t kNeighborOffsetCount = 8192;
+    } // namespace
 
 extern "C" FALCOR_API_EXPORT void registerPlugin(Falcor::PluginRegistry& registry)
 {
@@ -225,13 +193,16 @@ ReSTIRPTPass::ReSTIRPTPass(ref<Device> pDevice, const Properties& props) : Rende
     if (!mpDevice->isFeatureSupported(Device::SupportedFeatures::RaytracingTier1_1))
         FALCOR_THROW("ReSTIRPTPass requires Raytracing Tier 1.1 support.");
 
-    mSERSupported = mpDevice->isFeatureSupported(Device::SupportedFeatures::ShaderExecutionReorderingAPI);
+    //mSERSupported = mpDevice->isFeatureSupported(Device::SupportedFeatures::ShaderExecutionReorderingAPI);
 
     parseProperties(props);
     validateOptions();
 
     // Create sample generator.
     mpSampleGenerator = SampleGenerator::create(mpDevice, mStaticParams.sampleGenerator);
+
+    // Create neighbor offset texture.
+    mpNeighborOffsets = createNeighborOffsetTexture(kNeighborOffsetCount);
 
     // Create resolve pass. This doesn't depend on the scene so can be created here.
     auto defines = mStaticParams.getDefines(*this);
@@ -259,80 +230,62 @@ void ReSTIRPTPass::parseProperties(const Properties& props)
 {
     for (const auto& [key, value] : props)
     {
-        // Rendering parameters
-        if (key == kSamplesPerPixel)
-            mStaticParams.samplesPerPixel = value;
-        else if (key == kMaxSurfaceBounces)
-            mStaticParams.maxSurfaceBounces = value;
-        else if (key == kMaxDiffuseBounces)
-            mStaticParams.maxDiffuseBounces = value;
-        else if (key == kMaxSpecularBounces)
-            mStaticParams.maxSpecularBounces = value;
-        else if (key == kMaxTransmissionBounces)
-            mStaticParams.maxTransmissionBounces = value;
-
-        // Sampling parameters
-        else if (key == kSampleGenerator)
-            mStaticParams.sampleGenerator = value;
-        else if (key == kFixedSeed)
-        {
-            mParams.fixedSeed = value;
-            mParams.useFixedSeed = true;
-        }
-        else if (key == kUseBSDFSampling)
-            mStaticParams.useBSDFSampling = value;
-        else if (key == kUseRussianRoulette)
-            mStaticParams.useRussianRoulette = value;
-        else if (key == kUseNEE)
-            mStaticParams.useNEE = value;
-        else if (key == kUseMIS)
-            mStaticParams.useMIS = value;
-        else if (key == kMISHeuristic)
-            mStaticParams.misHeuristic = value;
-        else if (key == kMISPowerExponent)
-            mStaticParams.misPowerExponent = value;
-        else if (key == kEmissiveSampler)
-            mStaticParams.emissiveSampler = value;
-        else if (key == kLightBVHOptions)
-            mLightBVHOptions = value;
-        else if (key == kUseRTXDI)
-            mStaticParams.useRTXDI = value;
-        else if (key == kRTXDIOptions)
-            mRTXDIOptions = value;
-
-        // Material parameters
-        else if (key == kUseAlphaTest)
-            mStaticParams.useAlphaTest = value;
-        else if (key == kAdjustShadingNormals)
-            mStaticParams.adjustShadingNormals = value;
-        else if (key == kMaxNestedMaterials)
-            mStaticParams.maxNestedMaterials = value;
-        else if (key == kUseLightsInDielectricVolumes)
-            mStaticParams.useLightsInDielectricVolumes = value;
-        else if (key == kDisableCaustics)
-            mStaticParams.disableCaustics = value;
-        else if (key == kSpecularRoughnessThreshold)
-            mParams.specularRoughnessThreshold = value;
-        else if (key == kPrimaryLodMode)
-            mStaticParams.primaryLodMode = value;
-        else if (key == kLODBias)
-            mParams.lodBias = value;
-
+        if (key == kSamplesPerPixel) mStaticParams.samplesPerPixel = value;
+        else if (key == kMaxSurfaceBounces) mStaticParams.maxSurfaceBounces = value;
+        else if (key == kMaxDiffuseBounces) mStaticParams.maxDiffuseBounces = value;
+        else if (key == kMaxSpecularBounces) mStaticParams.maxSpecularBounces = value;
+        else if (key == kMaxTransmissionBounces) mStaticParams.maxTransmissionBounces = value;
+        else if (key == kAdjustShadingNormals) mStaticParams.adjustShadingNormals = value;
+        else if (key == kLODBias) mParams.lodBias = value;
+        else if (key == kSampleGenerator) mStaticParams.sampleGenerator = value;
+        else if (key == kFixedSeed) { mParams.fixedSeed = value; mParams.useFixedSeed = true; }
+        else if (key == kUseBSDFSampling) mStaticParams.useBSDFSampling = value;
+        else if (key == kUseNEE) mStaticParams.useNEE = value;
+        else if (key == kUseMIS) mStaticParams.useMIS = value;
+        else if (key == kUseRussianRoulette) mStaticParams.useRussianRoulette = value;
+        else if (key == kUseAlphaTest) mStaticParams.useAlphaTest = value;
+        else if (key == kMaxNestedMaterials) mStaticParams.maxNestedMaterials = value;
+        else if (key == kUseLightsInDielectricVolumes) mStaticParams.useLightsInDielectricVolumes = value;
+        else if (key == kLimitTransmission) mStaticParams.limitTransmission = value;
+        else if (key == kMaxTransmissionReflectionDepth) mStaticParams.maxTransmissionReflectionDepth = value;
+        else if (key == kMaxTransmissionRefractionDepth) mStaticParams.maxTransmissionRefractionDepth = value;
+        else if (key == kDisableCaustics) mStaticParams.disableCaustics = value;
+        else if (key == kSpecularRoughnessThreshold) mParams.specularRoughnessThreshold = value;
+        else if (key == kDisableDirectIllumination) mStaticParams.disableDirectIllumination = value;
+        else if (key == kPrimaryLodMode)  mStaticParams.primaryLodMode = value;
         // Denoising parameters
-        else if (key == kUseNRDDemodulation)
-            mStaticParams.useNRDDemodulation = value;
-
-        // Scheduling parameters
-        else if (key == kUseSER)
-            mStaticParams.useSER = value;
-
-        // Output parameters
-        else if (key == kOutputSize)
-            mOutputSizeSelection = value;
-        else if (key == kFixedOutputSize)
-            mFixedOutputSize = value;
-        else if (key == kColorFormat)
-            mStaticParams.colorFormat = value;
+        else if (key == kUseNRDDemodulation) mStaticParams.useNRDDemodulation = value;
+        else if (key == kColorFormat) mStaticParams.colorFormat = value;
+        else if (key == kMISHeuristic) mStaticParams.misHeuristic = value;
+        else if (key == kMISPowerExponent) mStaticParams.misPowerExponent = value;
+        else if (key == kEmissiveSampler) mStaticParams.emissiveSampler = value;
+        else if (key == kLightBVHOptions) mLightBVHOptions = value;
+        else if (key == kSpatialMisKind) mStaticParams.spatialMisKind = value;
+        else if (key == kTemporalMisKind) mStaticParams.temporalMisKind = value;
+        else if (key == kShiftStrategy) mStaticParams.shiftStrategy = value;
+        else if (key == kRejectShiftBasedOnJacobian) mParams.rejectShiftBasedOnJacobian = value;
+        else if (key == kJacobianRejectionThreshold) mParams.jacobianRejectionThreshold = value;
+        else if (key == kNearFieldDistance) mParams.nearFieldDistance = value;
+        else if (key == kTemporalHistoryLength) mTemporalHistoryLength = value;
+        else if (key == kUseMaxHistory) mUseMaxHistory = value;
+        else if (key == kSeedOffset) mSeedOffset = value;
+        else if (key == kEnableTemporalReuse) mEnableTemporalReuse = value;
+        else if (key == kEnableSpatialReuse) mEnableSpatialReuse = value;
+        else if (key == kNumSpatialRounds) mNumSpatialRounds = value;
+        else if (key == kPathSamplingMode) mStaticParams.pathSamplingMode = value;
+        else if (key == kLocalStrategyType) mParams.localStrategyType = value;
+        else if (key == kEnableTemporalReprojection) mEnableTemporalReprojection = value;
+        else if (key == kNoResamplingForTemporalReuse) mNoResamplingForTemporalReuse = value;
+        else if (key == kSpatialNeighborCount) mSpatialNeighborCount = value;
+        else if (key == kFeatureBasedRejection) mFeatureBasedRejection = value;
+        else if (key == kSpatialReusePattern) mSpatialReusePattern = value;
+        else if (key == kSmallWindowRestirWindowRadius) mSmallWindowRestirWindowRadius = value;
+        else if (key == kSpatialReuseRadius) mSpatialReuseRadius = value;
+        else if (key == kUseDirectLighting) mUseDirectLighting = value;
+        else if (key == kSeparatePathBSDF) mStaticParams.separatePathBSDF = value;
+        else if (key == kCandidateSamples) mStaticParams.candidateSamples = value;
+        else if (key == kTemporalUpdateForDynamicScene) mStaticParams.temporalUpdateForDynamicScene = value;
+        else if (key == kEnableRayStats) mEnableRayStats = value;
 
         else
             logWarning("Unknown property '{}' in ReSTIRPTPass properties.", key);
