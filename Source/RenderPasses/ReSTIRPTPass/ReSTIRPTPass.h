@@ -100,23 +100,23 @@ private:
     void validateOptions();
     void resetPrograms();
     void updatePrograms();
-    void setFrameDim(const uint2 frameDim);  //
+    void setFrameDim(const uint2 frameDim);
     void prepareResources(RenderContext* pRenderContext, const RenderData& renderData);
+    void setNRDData(const ShaderVar& var, const RenderData& renderData) const;
     void prepareReSTIRPT(const RenderData& renderData);
     void resetLighting();
     void prepareMaterials(RenderContext* pRenderContext);
     bool prepareLighting(RenderContext* pRenderContext);
 
-    void prepareRTXDI(RenderContext* pRenderContext);  //
-    void setNRDData(const ShaderVar& var, const RenderData& renderData) const;
-    void bindShaderData(const ShaderVar& var, const RenderData& renderData, bool useLightSampling = true) const;
+    //void prepareRTXDI(RenderContext* pRenderContext);  // not there in 2022
+    void bindShaderData(const ShaderVar& var, const RenderData& renderData, bool isPathTracer, bool isPathGenerator) const;
     bool renderRenderingUI(Gui::Widgets& widget);
     bool renderDebugUI(Gui::Widgets& widget);
     void renderStatsUI(Gui::Widgets& widget);
     bool beginFrame(RenderContext* pRenderContext, const RenderData& renderData);
     void endFrame(RenderContext* pRenderContext, const RenderData& renderData);
-    void generatePaths(RenderContext* pRenderContext, const RenderData& renderData);
-    void tracePass(RenderContext* pRenderContext, const RenderData& renderData, TracePass& tracePass);
+    void generatePaths(RenderContext* pRenderContext, const RenderData& renderData, int sampleId);
+    void tracePass(RenderContext* pRenderContext, const RenderData& renderData, TracePass& tracePass, int sampleID);
     //void resolvePass(RenderContext* pRenderContext, const RenderData& renderData);
     void PathReusePass(RenderContext* pRenderContext, uint32_t restir_i, const RenderData& renderData, bool temporalReuse = false, int spatialRoundId = 0, bool isLastRound = false);
     void PathRetracePass(RenderContext* pRenderContext, uint32_t restir_i, const RenderData& renderData, bool temporalReuse = false, int spatialRoundId = 0);
@@ -201,13 +201,13 @@ private:
     // Configuration
     RestirPathTracerParams mParams;            ///< Runtime path tracer parameters.
     StaticParams mStaticParams;                ///< Static parameters. These are set as compile-time constants in the shaders.
-    LightBVHSampler::Options mLightBVHOptions; ///< Current options for the light BVH sampler.
+    mutable LightBVHSampler::Options mLightBVHOptions; ///< Current options for the light BVH sampler.
 
-    /*bool mEnabled = true; ///< Switch to enable/disable the path tracer. When disabled the pass outputs are cleared.
+    bool mEnabled = true; ///< Switch to enable/disable the path tracer. When disabled the pass outputs are cleared.
     RenderPassHelpers::IOSize mOutputSizeSelection = RenderPassHelpers::IOSize::Default; ///< Selected output size.
     uint2 mFixedOutputSize = {512, 512}; ///< Output size in pixels when 'Fixed' size is selected.
 
-    bool mSERSupported = false; ///< True if the device supports SER.*/
+    //bool mSERSupported = false; ///< True if the device supports SER.
 
     // Internal state
     ref<Scene> mpScene;                                      ///< The current scene, or nullptr if no scene loaded.
@@ -225,11 +225,14 @@ private:
     bool mVarsChanged = true;     ///< This is set to true whenever the program vars have changed and resources need to be rebound.
     bool mOptionsChanged = false; ///< True if the config has changed since last frame.
     bool mGBufferAdjustShadingNormals = false; ///< True if GBuffer/VBuffer has adjusted shading normals enabled.
+    bool mOutputTime = false;                  ///< True if time data should be generated as output.
     bool mFixedSampleCount = true; ///< True if a fixed sample count per pixel is used. Otherwise load it from the pass sample count input.
     bool mOutputGuideData = false; ///< True if guide data should be generated as outputs.
     bool mOutputNRDData = false;   ///< True if NRD diffuse/specular data should be generated as outputs.
     bool mOutputNRDAdditionalData = false; ///< True if NRD data from delta and residual paths should be generated as designated outputs
                                            ///< rather than being included in specular NRD outputs.
+    bool mEnableRayStats = false;          ///< Set to true when the stats tab in the UI is open. This may negatively affect performance.
+
     uint64_t mAccumulatedRayCount = 0;
     uint64_t mAccumulatedClosestHitRayCount = 0;
     uint64_t mAccumulatedShadowRayCount = 0;
