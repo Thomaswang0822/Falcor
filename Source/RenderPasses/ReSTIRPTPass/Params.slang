@@ -71,6 +71,8 @@ static const uint kMaxFrameDimension = 4096;        ///< Maximum supported frame
 static const uint kMaxBounces = 14;                ///< Maximum supported number of bounces per bounce category (value 255 is reserved for internal use). The resulting path length may be longer than this.
 static const uint kMaxLightSamplesPerVertex = 8;    ///< Maximum number of shadow rays per path vertex for next-event estimation.
 
+/// ReSTIR PT enums
+
 enum class ShiftMapping : uint32_t
 {
     Reconnection = 0,
@@ -78,20 +80,28 @@ enum class ShiftMapping : uint32_t
     Hybrid = 2,
 };
 
-enum class LocalStrategy
-#ifdef HOST_CODE
-    : uint32_t
-#endif
+FALCOR_ENUM_INFO(ShiftMapping, {
+        { ShiftMapping::Reconnection, "Reconnection" },
+        { ShiftMapping::RandomReplay, "RandomReplay" },
+        { ShiftMapping::Hybrid, "Hybrid" },
+});
+FALCOR_ENUM_REGISTER(ShiftMapping);
+
+enum class LocalStrategy : uint32_t
 {
     None = 0x0,
     RoughnessCondition = 0x1,
     DistanceCondition = 0x2,
 };
 
-enum class ReSTIRMISKind
-#ifdef HOST_CODE
-    : uint32_t
-#endif
+FALCOR_ENUM_INFO(LocalStrategy, {
+    { LocalStrategy::None, "None" },
+    { LocalStrategy::RoughnessCondition, "RoughnessCondition" },
+    { LocalStrategy::DistanceCondition, "DistanceCondition" },
+});
+FALCOR_ENUM_REGISTER(LocalStrategy);
+
+enum class ReSTIRMISKind : uint32_t
 {
     Constant = 0,
     Talbot = 1,
@@ -100,14 +110,26 @@ enum class ReSTIRMISKind
     ConstantBiased = 4
 };
 
-enum class SpatialReusePattern
-#ifdef HOST_CODE
-    : uint32_t
-#endif
+FALCOR_ENUM_INFO(ReSTIRMISKind, {
+    { ReSTIRMISKind::Constant, "Constant" },
+    { ReSTIRMISKind::Talbot, "Talbot" },
+    { ReSTIRMISKind::Pairwise, "Pairwise" },
+    { ReSTIRMISKind::ConstantBinary, "ConstantBinary" },
+    { ReSTIRMISKind::ConstantBiased, "ConstantBiased" },
+});
+FALCOR_ENUM_REGISTER(ReSTIRMISKind);
+
+enum class SpatialReusePattern : uint32_t
 {
     Default = 0, // same as in ScreenSpaceReSTIR
     SmallWindow = 1,
 };
+
+FALCOR_ENUM_INFO(SpatialReusePattern, {
+    { SpatialReusePattern::Default, "Default" },
+    { SpatialReusePattern::SmallWindow, "SmallWindow" },
+});
+FALCOR_ENUM_REGISTER(SpatialReusePattern);
 
 enum class PathSamplingMode
 {
@@ -116,6 +138,13 @@ enum class PathSamplingMode
     PathTracing
 };
 
+FALCOR_ENUM_INFO(PathSamplingMode, {
+    { PathSamplingMode::ReSTIR, "ReSTIR" },
+    { PathSamplingMode::PathReuse, "PathReuse" },
+    { PathSamplingMode::PathTracing, "PathTracing" },
+});
+FALCOR_ENUM_REGISTER(PathSamplingMode);
+
 enum class PathReusePattern
 {
     Block,
@@ -123,6 +152,14 @@ enum class PathReusePattern
     NRooksShift
 };
 
+FALCOR_ENUM_INFO(PathReusePattern, {
+    { PathReusePattern::Block, "Block" },
+    { PathReusePattern::NRooks, "NRooks" },
+    { PathReusePattern::NRooksShift, "NRooksShift" },
+});
+FALCOR_ENUM_REGISTER(PathReusePattern);
+
+/// end of ReSTIR PT enums
 
 // Import static specialization constants.
 #ifndef HOST_CODE
