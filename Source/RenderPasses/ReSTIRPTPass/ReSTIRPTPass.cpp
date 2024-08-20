@@ -80,7 +80,7 @@ namespace
 
     const Falcor::ChannelList kOutputChannels =
     {
-        { kOutputColor,                 "gOutputColor",                 "Output color (linear)", true /* optional */ },
+        { kOutputColor,                 "gOutputColor",                 "Output color (linear)", true /* optional */, ResourceFormat::RGBA32Float },
         { kOutputAlbedo,                "gOutputAlbedo",                "Output albedo (linear)", true /* optional */, ResourceFormat::RGBA8Unorm },
         { kOutputNormal,                "gOutputNormal",                "Output normal (linear)", true /* optional */, ResourceFormat::RGBA16Float },
         { kOutputRayCount,              "",                             "Per-pixel ray count", true /* optional */, ResourceFormat::R32Uint },
@@ -1324,7 +1324,7 @@ void ReSTIRPTPass::prepareResources(RenderContext* pRenderContext, const RenderD
     // Allocate output sample offset buffer if needed.
     // This buffer stores the output offset to where the samples for each pixel are stored consecutively.
     // The offsets are local to the current tile, so 16-bit format is sufficient and reduces bandwidth usage.
-    /// Not ther in 2022 code
+    /// Not in their 2022 code
     /*
     if (!mFixedSampleCount)
     {
