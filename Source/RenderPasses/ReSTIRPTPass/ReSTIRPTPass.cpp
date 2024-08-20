@@ -1616,9 +1616,9 @@ bool ReSTIRPTPass::prepareLighting(RenderContext* pRenderContext)
 
 void ReSTIRPTPass::setNRDData(const ShaderVar& var, const RenderData& renderData) const
 {
-    var["primaryHitEmission"] = renderData[kOutputNRDEmission]->asTexture();
-    var["primaryHitDiffuseReflectance"] = renderData[kOutputNRDDiffuseReflectance]->asTexture();
-    var["primaryHitSpecularReflectance"] = renderData[kOutputNRDSpecularReflectance]->asTexture();
+    var["primaryHitEmission"] = renderData.getTexture(kOutputNRDEmission);
+    var["primaryHitDiffuseReflectance"] = renderData.getTexture(kOutputNRDDiffuseReflectance);
+    var["primaryHitSpecularReflectance"] = renderData.getTexture(kOutputNRDSpecularReflectance);
 }
 
 void ReSTIRPTPass::bindShaderData(const ShaderVar& var, const RenderData& renderData, bool isPathTracer, bool isPathGenerator) const
@@ -1647,11 +1647,11 @@ void ReSTIRPTPass::bindShaderData(const ShaderVar& var, const RenderData& render
     {
         setNRDData(var["outputNRD"], renderData);
         ///< Output resolved diffuse color in .rgb and hit distance in .a for NRD. Only valid if kOutputNRDData == true.
-        var["outputNRDDiffuseRadianceHitDist"] = renderData[kOutputNRDDiffuseRadianceHitDist]->asTexture();
+        var["outputNRDDiffuseRadianceHitDist"] = renderData.getTexture(kOutputNRDDiffuseRadianceHitDist);
         ///< Output resolved specular color in .rgb and hit distance in .a for NRD. Only valid if kOutputNRDData == true.
-        var["outputNRDSpecularRadianceHitDist"] = renderData[kOutputNRDSpecularRadianceHitDist]->asTexture();
+        var["outputNRDSpecularRadianceHitDist"] = renderData.getTexture(kOutputNRDSpecularRadianceHitDist);
         ///< Output resolved residual color in .rgb and hit distance in .a for NRD. Only valid if kOutputNRDData == true.
-        var["outputNRDResidualRadianceHitDist"] = renderData[kOutputNRDResidualRadianceHitDist]->asTexture();
+        var["outputNRDResidualRadianceHitDist"] = renderData.getTexture(kOutputNRDResidualRadianceHitDist);
     }
 
     if (isPathTracer)
@@ -1669,11 +1669,11 @@ void ReSTIRPTPass::bindShaderData(const ShaderVar& var, const RenderData& render
 
     if (auto outputDebug = var.findMember("outputDebug"); outputDebug.isValid())
     {
-        outputDebug = renderData[kOutputDebug]->asTexture(); // Can be nullptr
+        outputDebug = renderData.getTexture(kOutputDebug); // Can be nullptr
     }
     if (auto outputTime = var.findMember("outputTime"); outputTime.isValid())
     {
-        outputTime = renderData[kOutputTime]->asTexture(); // Can be nullptr
+        outputTime = renderData.getTexture(kOutputTime); // Can be nullptr
     }
 
     if (isPathTracer && mpEmissiveSampler)
@@ -1804,7 +1804,7 @@ bool ReSTIRPTPass::beginFrame(RenderContext* pRenderContext, const RenderData& r
         || renderData[kOutputNRDDiffuseReflectance] != nullptr
         || renderData[kOutputNRDSpecularReflectance] != nullptr;
 
-    
+
     // Check if additional NRD data should be generated.
     bool prevOutputNRDAdditionalData = mOutputNRDAdditionalData;
     /*
@@ -2010,7 +2010,7 @@ void ReSTIRPTPass::PathReusePass(
     if (mStaticParams.pathSamplingMode == PathSamplingMode::PathReuse)
     {
         var["misWeightBuffer"] = mPathReuseMISWeightBuffer;
-    }        
+    }
     else if (!isPathReuseMISWeightComputation)
     {
         var["temporalReservoirs"] = spatialRoundId % 2 == 0 ? mpTemporalReservoirs[restir_i] : mpOutputReservoirs;
@@ -2021,7 +2021,7 @@ void ReSTIRPTPass::PathReusePass(
     if (temporalReuse)
     {
         var["temporalVbuffer"] = mpTemporalVBuffer;
-        var["motionVectors"] = renderData[kInputMotionVectors]->asTexture();
+        var["motionVectors"] = renderData.getTexture(kInputMotionVectors);
         var["gEnableTemporalReprojection"] = mEnableTemporalReprojection;
         var["gNoResamplingForTemporalReuse"] = mNoResamplingForTemporalReuse;
         if (!mUseMaxHistory)
@@ -2046,17 +2046,17 @@ void ReSTIRPTPass::PathReusePass(
 
         if (mOutputNRDData && !isPathReuseMISWeightComputation)
         {
-            var["outputNRDDiffuseRadianceHitDist"] = renderData[kOutputNRDDiffuseRadianceHitDist]->asTexture();
-            var["outputNRDSpecularRadianceHitDist"] = renderData[kOutputNRDSpecularRadianceHitDist]->asTexture();
-            var["outputNRDResidualRadianceHitDist"] = renderData[kOutputNRDResidualRadianceHitDist]->asTexture();
-            var["primaryHitEmission"] = renderData[kOutputNRDEmission]->asTexture();
+            var["outputNRDDiffuseRadianceHitDist"] = renderData.getTexture(kOutputNRDDiffuseRadianceHitDist);
+            var["outputNRDSpecularRadianceHitDist"] = renderData.getTexture(kOutputNRDSpecularRadianceHitDist);
+            var["outputNRDResidualRadianceHitDist"] = renderData.getTexture(kOutputNRDResidualRadianceHitDist);
+            var["primaryHitEmission"] = renderData.getTexture(kOutputNRDEmission);
             var["gSppId"] = restir_i;
         }
     }
 
     if (!isPathReuseMISWeightComputation)
     {
-        var["directLighting"] = renderData[kInputDirectLighting]->asTexture();
+        var["directLighting"] = renderData.getTexture(kInputDirectLighting);
         var["useDirectLighting"] = mUseDirectLighting;
     }
     var["gIsLastRound"] = mStaticParams.pathSamplingMode == PathSamplingMode::PathReuse || isLastRound;
@@ -2119,7 +2119,7 @@ void ReSTIRPTPass::PathRetracePass(
     if (temporalReuse)
     {
         var["temporalVbuffer"] = mpTemporalVBuffer;
-        var["motionVectors"] = renderData[kInputMotionVectors]->asTexture();
+        var["motionVectors"] = renderData.getTexture(kInputMotionVectors);
         var["gEnableTemporalReprojection"] = mEnableTemporalReprojection;
         var["gNoResamplingForTemporalReuse"] = mNoResamplingForTemporalReuse;
         if (!mUseMaxHistory)

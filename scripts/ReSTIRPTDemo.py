@@ -5,8 +5,8 @@ import os
 def render_graph_ReSTIRPT():
     g = RenderGraph("ReSTIRPT")
 
-    ReSTIRGIPlusPass = createPass("ReSTIRPT", {'samplesPerPixel': 1})
-    g.addPass(ReSTIRGIPlusPass, "ReSTIRPT")
+    ReSTIRPTPass = createPass("ReSTIRPTPass", {'samplesPerPixel': 1})
+    g.addPass(ReSTIRPTPass, "ReSTIRPTPass")
     VBufferRT = createPass("VBufferRT")
     g.addPass(VBufferRT, "VBufferRT")
     AccumulatePass = createPass("AccumulatePass", {'enabled': False, 'precisionMode': 'Double'})
@@ -16,14 +16,14 @@ def render_graph_ReSTIRPT():
     ScreenSpaceReSTIRPass = createPass("ScreenSpaceReSTIRPass")
     g.addPass(ScreenSpaceReSTIRPass, "ScreenSpaceReSTIRPass")
 
-    g.addEdge("VBufferRT.vbuffer", "ReSTIRPT.vbuffer")
-    g.addEdge("VBufferRT.mvec", "ReSTIRPT.mvec")
+    g.addEdge("VBufferRT.vbuffer", "ReSTIRPTPass.vbuffer")
+    g.addEdge("VBufferRT.mvec", "ReSTIRPTPass.motionVectors")
 
     g.addEdge("VBufferRT.vbuffer", "ScreenSpaceReSTIRPass.vbuffer")
     g.addEdge("VBufferRT.mvec", "ScreenSpaceReSTIRPass.motionVectors")
-    g.addEdge("ScreenSpaceReSTIRPass.color", "ReSTIRPT.directLighting")
+    g.addEdge("ScreenSpaceReSTIRPass.color", "ReSTIRPTPass.directLighting")
 
-    g.addEdge("ReSTIRPT.color", "AccumulatePass.input")
+    g.addEdge("ReSTIRPTPass.color", "AccumulatePass.input")
     g.addEdge("AccumulatePass.output", "ToneMapper.src")
 
     g.markOutput("ToneMapper.dst")
