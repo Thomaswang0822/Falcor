@@ -197,7 +197,6 @@ void ResourceCache::allocateResources(ref<Device> pDevice, const DefaultProperti
     {
         if ((data.pResource == nullptr) && (data.field.isValid()))
         {
-            logInfo("Check data.name: {}", data.name);
             data.pResource = createResourceForPass(pDevice, params, data.field, data.resolveBindFlags, data.name);
         }
     }

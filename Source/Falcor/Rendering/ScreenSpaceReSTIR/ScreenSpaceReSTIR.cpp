@@ -101,20 +101,20 @@ namespace Falcor
         FALCOR_ASSERT(pScene);
         setOptions(options);
 
-        //// Create compute pass for reflecting data types.
-        //Desc desc;
-        //DefineList defines;
-        //defines.add(mpScene->getSceneDefines());
-        //defines.add(getLightsDefines());
-        //desc.addShaderLibrary(kReflectTypesFile).csEntry("main").setShaderModel(kShaderModel);
-        //mpReflectTypes = ComputePass::create(desc, defines);
+        // Create compute pass for reflecting data types.
+        ProgramDesc desc;
+        DefineList defines;
+        defines.add(mpScene->getSceneDefines());
+        defines.add(getLightsDefines());
+        desc.addShaderLibrary(kReflectTypesFile).csEntry("main");
+        mpReflectTypes = ComputePass::create(mpDevice, desc, defines, true /* createVars */);
 
-        //// Create neighbor offset texture.
-        //mpNeighborOffsets = createNeighborOffsetTexture(kNeighborOffsetCount);
+        // Create neighbor offset texture.
+        mpNeighborOffsets = createNeighborOffsetTexture(kNeighborOffsetCount);
 
-        //mNumReSTIRInstances = numReSTIRInstances;
-        //mReSTIRInstanceIndex = ReSTIRInstanceID;
-        //mFrameIndex = mReSTIRInstanceIndex;
+        mNumReSTIRInstances = numReSTIRInstances;
+        mReSTIRInstanceIndex = ReSTIRInstanceID;
+        mFrameIndex = mReSTIRInstanceIndex;
     }
 
     DefineList ScreenSpaceReSTIR::getDefines() const
@@ -452,12 +452,14 @@ namespace Falcor
 
     void ScreenSpaceReSTIR::prepareResources(RenderContext* pRenderContext)
     {
+        FALCOR_ASSERT(mpReflectTypes->hasVars(), "mpReflectTypes.mpVars is nullptr");
+        auto var = mpReflectTypes->getRootVar();
         // Create light tile buffers.
         {
             uint32_t elementCount = mOptions.lightTileCount * mOptions.lightTileSize;
             if (!mpLightTileData || mpLightTileData->getElementCount() < elementCount)
             {
-                mpLightTileData = mpDevice->createStructuredBuffer(mpReflectTypes->getRootVar()["lightTileData"], elementCount);
+                mpLightTileData = mpDevice->createStructuredBuffer(var["lightTileData"], elementCount);
             }
         }
 
@@ -466,28 +468,28 @@ namespace Falcor
             uint32_t elementCount = mFrameDim.x * mFrameDim.y;
             if (!mpSurfaceData || mpSurfaceData->getElementCount() < elementCount)
             {
-                mpSurfaceData = mpDevice->createStructuredBuffer(mpReflectTypes->getRootVar()["surfaceData"], elementCount);
+                mpSurfaceData = mpDevice->createStructuredBuffer(var["surfaceData"], elementCount);
             }
             if (!mpPrevSurfaceData || mpPrevSurfaceData->getElementCount() < elementCount)
             {
-                mpPrevSurfaceData = mpDevice->createStructuredBuffer(mpReflectTypes->getRootVar()["surfaceData"], elementCount);
+                mpPrevSurfaceData = mpDevice->createStructuredBuffer(var["surfaceData"], elementCount);
             }
             if (!mpReservoirs || mpReservoirs->getElementCount() < elementCount || mRequestReallocate)
             {
-                //mpReservoirs = mpDevice->createStructuredBuffer(mpReflectTypes->getRootVar()["reservoirs"], elementCount, Resource::State::ShaderResource | Resource::State::UnorderedAccess, Buffer::CpuAccess::None, nullptr, false);
+                //mpReservoirs = mpDevice->createStructuredBuffer(var["reservoirs"], elementCount, Resource::State::ShaderResource | Resource::State::UnorderedAccess, Buffer::CpuAccess::None, nullptr, false);
                 // WARNING: this assumes we use the uint4 packedReservoir by default (Reservoir.slang)
                 mpReservoirs = mpDevice->createStructuredBuffer(16, elementCount);
             }
             if (!mpPrevReservoirs || mpPrevReservoirs->getElementCount() < elementCount || mRequestReallocate)
             {
-                //mpPrevReservoirs = mpDevice->createStructuredBuffer(mpReflectTypes->getRootVar()["reservoirs"], elementCount, Resource::State::ShaderResource | Resource::State::UnorderedAccess, Buffer::CpuAccess::None, nullptr, false);
+                //mpPrevReservoirs = mpDevice->createStructuredBuffer(var["reservoirs"], elementCount, Resource::State::ShaderResource | Resource::State::UnorderedAccess, Buffer::CpuAccess::None, nullptr, false);
                 // WARNING: this assumes we use the uint4 packedReservoir by default (Reservoir.slang)
                 mpPrevReservoirs = mpDevice->createStructuredBuffer(16, elementCount);
             }
 
             if (!mpFinalSamples || mpFinalSamples->getElementCount() < elementCount || mRequestReallocate)
             {
-                //mpFinalSamples = mpDevice->createStructuredBuffer(mpReflectTypes->getRootVar()["finalSamples"], elementCount, Resource::State::ShaderResource | Resource::State::UnorderedAccess, Buffer::CpuAccess::None, nullptr, false);
+                //mpFinalSamples = mpDevice->createStructuredBuffer(var["finalSamples"], elementCount, Resource::State::ShaderResource | Resource::State::UnorderedAccess, Buffer::CpuAccess::None, nullptr, false);
                 mpFinalSamples = mpDevice->createStructuredBuffer(32, elementCount);
             }
 
@@ -497,7 +499,7 @@ namespace Falcor
 
             if (!mpGIInitialSamples || initialReservoirCount != mpGIInitialSamples->getElementCount())
             {
-                mpGIInitialSamples = mpDevice->createStructuredBuffer(mpReflectTypes->getRootVar()["giReservoirs"], initialReservoirCount);
+                mpGIInitialSamples = mpDevice->createStructuredBuffer(var["giReservoirs"], initialReservoirCount);
                 if (mpGIInitialSamples->getStructSize() % 16 != 0) logWarning("PackedGIReservoir struct size is not a multiple of 16B");
             }
 
@@ -507,7 +509,7 @@ namespace Falcor
             {
                 if (!mpGIReservoirs[i] || mpGIReservoirs[i]->getElementCount() != reservoirCount)
                 {
-                    mpGIReservoirs[i] = mpDevice->createStructuredBuffer(mpReflectTypes->getRootVar()["giReservoirs"], reservoirCount);
+                    mpGIReservoirs[i] = mpDevice->createStructuredBuffer(var["giReservoirs"], reservoirCount);
                     if (mpGIReservoirs[i]->getStructSize() % 16 != 0) logWarning("PackedGIReservoir struct size is not a multiple of 16B");
                 }
             }
