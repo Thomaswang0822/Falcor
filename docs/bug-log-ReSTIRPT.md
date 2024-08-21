@@ -27,3 +27,9 @@ Error Msg:
 ```
 
 Looks like sth wrong happend before/during handling light.
+
+Cause & how to locate:
+
+(After trying to print at so many places), `logInfo()` in `RenderGraphExe::execute`.
+The exact cause of this memory error needs further investigation, but the log
+tells us it happened during the first call of **ScreenSpaceReSTIRPass**.

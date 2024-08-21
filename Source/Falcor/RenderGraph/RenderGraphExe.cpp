@@ -37,9 +37,12 @@ void RenderGraphExe::execute(const Context& ctx)
     for (const auto& pass : mExecutionList)
     {
         FALCOR_PROFILE(ctx.pRenderContext, pass.name);
-
+        /// TO REMOVE: finally, these 2 lines help identify the exit=3221225477 memory bug:
+        /// it's in SSReSTIRPass.
+        logInfo("Begin execute() on pass: {}", pass.name);
         RenderData renderData(pass.name, *mpResourceCache, ctx.passesDictionary, ctx.defaultTexDims, ctx.defaultTexFormat);
         pass.pPass->execute(ctx.pRenderContext, renderData);
+        logInfo("Finish execute() on pass: {}", pass.name);
     }
 }
 
