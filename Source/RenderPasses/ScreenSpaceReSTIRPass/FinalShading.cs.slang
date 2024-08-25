@@ -10,7 +10,7 @@
 import LoadShadingData;
 import Scene.RaytracingInline;
 import Rendering.Materials.StandardMaterial;
-// import Rendering.Materials.Microfacet;
+import Rendering.Materials.Microfacet;
 import Rendering.Materials.IsotropicGGX;
 import Rendering.ScreenSpaceReSTIR.ScreenSpaceReSTIR;
 import Utils.Sampling.TinyUniformSampleGenerator;
@@ -42,7 +42,7 @@ struct FinalShading
     uint numReSTIRInstances;
     uint ReSTIRInstanceID;
 
-    void execute(uint2 pixel)
+    void execute(const uint2 pixel)
     {
         if (any(pixel >= frameDim)) return;
 

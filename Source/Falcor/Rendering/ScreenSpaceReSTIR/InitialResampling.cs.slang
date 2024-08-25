@@ -163,7 +163,7 @@ struct InitialResampling
                 {
                     float brdfPdf = evalContext.evalPdfBRDF(kSpecularOnly, dir);
                     float maxDistance = maxDistanceFromPdf(brdfPdf);
-                    RayDesc ray = { evalContext.pos, 0.f, dir, maxDistance + 0.01f };
+                    Ray ray = { evalContext.pos, 0.f, dir, maxDistance + 0.01f };
                     HitInfo hit;
                     if (Lights::kUseEmissiveLights && evalContext.traceRay(ray, hit))
                     {

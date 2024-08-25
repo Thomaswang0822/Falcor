@@ -45,7 +45,7 @@ mpLightTileData = mpDevice->createStructuredBuffer(mpReflectTypes->getRootVar()[
 At last, `mpReflectTypes->getRootVar()` is a `nullptr`, because I wrongly commented out a section that create the Pass
 in the constructor of `ScreenSpaceReSTIR`.
 
-## Curr TODO
+## RayDesc instead of Ray
 
 Error Msg:
 
@@ -59,4 +59,17 @@ D:\Code\Falcor\build\windows-vs2022\bin\Debug\shaders\Rendering\ScreenSpaceReSTI
 ......
 ```
 
-looks not difficult. Hope it's not.
+A "lovely" bug because the error msg is very informative. The reason under the hood is that Falcor 7.0 uses `Ray` to abstract the API-specific (to DXR) `RayDesc` struct.
+
+## Curr TODO
+
+Error Msg:
+
+```shell
+(Error) Caught an exception:
+
+Failed to link program:
+Rendering/Materials/StandardMaterial.slang RenderPasses/ScreenSpaceReSTIRPass/FinalShading.cs.slang (main)
+
+Type 'StandardMaterial' in type conformance was not found.
+```

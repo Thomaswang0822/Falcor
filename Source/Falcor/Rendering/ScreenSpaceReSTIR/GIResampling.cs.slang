@@ -130,7 +130,7 @@ struct GIResampling
         float3 offset = endPoint - pos;
         float tMax = length(offset);
         float3 dir = offset / tMax;
-        RayDesc ray = { pos, 0.001f, dir, 0.999* tMax };
+        Ray ray = { pos, 0.001f, dir, 0.999* tMax };
         SceneRayQuery<kUseAlphaTest> sceneRayQuery;
         return sceneRayQuery.traceVisibilityRay(ray, RAY_FLAG_NONE, 0xff);
     }

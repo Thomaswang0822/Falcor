@@ -1,7 +1,6 @@
 /***************************************************************************
  # Copyright (c) 2022, Daqi Lin.  All rights reserved.
  **************************************************************************/
-#include "Scene/Material/MaterialDefines.slangh"
 
 import Scene.RaytracingInline;
 import Rendering.Lights.EnvMapSampler;
