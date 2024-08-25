@@ -73,3 +73,17 @@ Rendering/Materials/StandardMaterial.slang RenderPasses/ScreenSpaceReSTIRPass/Fi
 
 Type 'StandardMaterial' in type conformance was not found.
 ```
+
+One of the difficulties is to draw correspondance b/w Falcor 7.0 and Falcor in 2022. ***Source\RenderPasses\MinimalPathTracer\MinimalPathTracer.rt.slang*** are in both codebases and can serve as
+a great reference. A line-by-line comparison gives this key info:
+
+```cs
+// 2022 code
+static struct Data
+{
+    // Materials
+    StandardMaterial standardMaterial;
+} gData;
+```
+
+This struct carries material info, but was not in Falcor 7.0 code. In 2022 code it's used as (in `evalDirectAnalytic()`) `gData.standardMaterial.eval(sd, ls.dir)`, and now it becomes `mi.eval(sd, ls.dir, sg)`, where `const IMaterialInstance mi` is the function arg.

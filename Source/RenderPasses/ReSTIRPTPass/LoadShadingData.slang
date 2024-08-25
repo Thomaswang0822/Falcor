@@ -25,7 +25,7 @@
  # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  **************************************************************************/
-#include "Scene/ScenePrimitiveDefines.slangh"
+#include "Scene/SceneDefines.slangh"
 import Scene.Scene;
 __exported import Scene.HitInfo;
 __exported import Scene.Shading;
@@ -33,6 +33,9 @@ import Utils.Math.MathHelpers;
 import Rendering.Materials.TexLODHelpers;
 import Params;
 import Utils.Debug.PixelDebug;
+
+// This was in 2022 SceneDefines.slangh, but not in Falcor 7.0
+#define IS_SET(flags, type) ((flags) & (type))
 
 /** Compute derivatives at primarty triangle hit.
 */
@@ -63,40 +66,66 @@ void computeDerivativesAtPrimaryTriangleHit(const TriangleHit hit, uint2 pixel, 
 
 /** Setup vertex data based on hit point.
     \param[in] hit Hit information.
+    \param[in] rayOrigin Ray origin.
+    \param[in] rayDir Normalized ray direction.
     \param[out] materialID Material ID.
-    \param[out] curveSphereRadius Curve sphere radius.
     \return VertexData struct.
 */
-VertexData loadVertexData(const HitInfo hit, const float3 viewDir, out uint materialID, out float curveSphereRadius)
+VertexData loadVertexData(const HitInfo hit, const float3 rayOrigin, const float3 rayDir, out uint materialID)
 {
     VertexData v = {};
-#if IS_SET(SCENE_PRIMITIVE_TYPE_FLAGS, PRIMITIVE_TYPE_TRIANGLE_MESH)
-#if IS_SET(SCENE_PRIMITIVE_TYPE_FLAGS, PRIMITIVE_TYPE_PROCEDURAL)
+    materialID = {};
+
+#if SCENE_HAS_GEOMETRY_TYPE(GEOMETRY_TYPE_TRIANGLE_MESH)
     if (hit.getType() == HitType::Triangle)
-#endif
     {
         const TriangleHit triangleHit = hit.getTriangleHit();
-        v = gScene.getVertexData(triangleHit);
+        StaticVertexData vertices[3];
+        v = gScene.getVertexData(triangleHit, vertices);
         materialID = gScene.getMaterialID(triangleHit.instanceID);
     }
 #endif
-#if IS_SET(SCENE_PRIMITIVE_TYPE_FLAGS, PRIMITIVE_TYPE_DISPLACED_TRIANGLE_MESH)
+#if SCENE_HAS_GEOMETRY_TYPE(GEOMETRY_TYPE_DISPLACED_TRIANGLE_MESH)
     if (hit.getType() == HitType::DisplacedTriangle)
     {
         const DisplacedTriangleHit displacedTriangleHit = hit.getDisplacedTriangleHit();
-        v = gScene.getVertexData(displacedTriangleHit, viewDir);
+        v = gScene.getVertexData(displacedTriangleHit, -rayDir);
         materialID = gScene.getMaterialID(displacedTriangleHit.instanceID);
     }
 #endif
-#if IS_SET(SCENE_PRIMITIVE_TYPE_FLAGS, PRIMITIVE_TYPE_CURVE)
+#if SCENE_HAS_GEOMETRY_TYPE(GEOMETRY_TYPE_CURVE)
     if (hit.getType() == HitType::Curve)
     {
         const CurveHit curveHit = hit.getCurveHit();
-        v = gScene.getVertexDataFromCurve(curveHit, curveSphereRadius);
-        materialID = gScene.getCurveMaterialID(curveHit.instanceID);
+        v = gScene.getVertexDataFromCurve(curveHit);
+        materialID = gScene.getMaterialID(curveHit.instanceID);
+    }
+#endif
+#if SCENE_HAS_GEOMETRY_TYPE(GEOMETRY_TYPE_SDF_GRID)
+    if (hit.getType() == HitType::SDFGrid)
+    {
+        const SDFGridHit sdfGridHit = hit.getSDFGridHit();
+        v = gScene.getVertexDataFromSDFGrid(sdfGridHit, rayOrigin, rayDir);
+        materialID = gScene.getMaterialID(sdfGridHit.instanceID);
     }
 #endif
     return v;
+}
+
+/** Determine hints to use when creating the material instance.
+ */
+uint getMaterialInstanceHints(const HitInfo hit, const bool isPrimary)
+{
+    uint hints = 0;
+    if (hit.getType() == HitType::Triangle || hit.getType() == HitType::DisplacedTriangle)
+    {
+#if GBUFFER_ADJUST_SHADING_NORMALS
+        if (kAdjustShadingNormals || isPrimary) hints |= (uint)MaterialInstanceHints::AdjustShadingNormal;
+#else
+        if (kAdjustShadingNormals && !isPrimary) hints |= (uint)MaterialInstanceHints::AdjustShadingNormal;
+#endif
+    }
+    return hints;
 }
 
 /** Adjust ShadingData
@@ -106,12 +135,21 @@ VertexData loadVertexData(const HitInfo hit, const float3 viewDir, out uint mate
     \param[in] v Vertex data.
     \param[in] isPrimary True if this is the primary hit point.
 */
+/** Falcor 7.0 UPDATE
+This function essentially calls a adjustShadingNormal(), which never appears in any 7.0 RenderPasses code.
+Thus, we disable it.
+
+Instead, it's likely replaced by getMaterialInstanceHints(), see LoadShadingData.slang of PathTracer pass.
+*/
+
+/**********
 void adjustShadingData(inout ShadingData sd, const HitInfo hit, const float curveSphereRadius, const VertexData v, const bool isPrimary)
 {
     // Set sphere radius at the curve intersection point.
     // Reuse the metallic field.
-#if IS_SET(SCENE_PRIMITIVE_TYPE_FLAGS, PRIMITIVE_TYPE_CURVE)
-    if (hit.getType() == HitType::Curve) sd.metallic = curveSphereRadius;
+#if SCENE_HAS_GEOMETRY_TYPE(GEOMETRY_TYPE_CURVE)
+    if (hit.getType() == HitType::Curve)
+        sd.metallic = curveSphereRadius;
 #endif
 
 #if GBUFFER_ADJUST_SHADING_NORMALS
@@ -120,6 +158,7 @@ void adjustShadingData(inout ShadingData sd, const HitInfo hit, const float curv
     if (kAdjustShadingNormals && !isPrimary) adjustShadingNormal(sd, v);
 #endif
 }
+***********/
 
 /** Setup ShadingData based on loaded vertex/material attributes for a hit point.
     \param[in] hit Hit information.
@@ -128,25 +167,24 @@ void adjustShadingData(inout ShadingData sd, const HitInfo hit, const float curv
     \param[in] lod level of detail bias value.
     \return ShadingData struct.
 */
-ShadingData loadShadingData(const HitInfo hit, const float3 viewDir, const bool isPrimary, const float lod = 0.f)
+ShadingData loadShadingData(const HitInfo hit, const float3 rayOrigin, const float3 rayDir, const ITextureSampler lod)
 {
-    float curveSphereRadius = {};
     uint materialID = {};
-    VertexData v = loadVertexData(hit, viewDir, materialID, curveSphereRadius);
-    ShadingData sd = prepareShadingData(v, materialID, gScene.materials[materialID], gScene.materialResources[materialID], viewDir, lod);
-    adjustShadingData(sd, hit, curveSphereRadius, v, isPrimary);
+
+    VertexData v = loadVertexData(hit, rayOrigin, rayDir, materialID);
+    ShadingData sd = gScene.materials.prepareShadingData(v, materialID, -rayDir, lod);
     return sd;
 }
 
 // daqi: currently don't support DisplacedTriangle
-ShadingData loadShadingDataWithPrevVertexPosition(const HitInfo hit, const float3 prevVertexPosition, const bool isPrimary, const float lod = 0.f)
+ShadingData loadShadingDataWithPrevVertexPosition(const HitInfo hit, const float3 prevVertexPosition, const float3 rayOrigin, const ITextureSampler lod)
 {
-    float curveSphereRadius = {};
     uint materialID = {};
-    VertexData v = loadVertexData(hit, float3(0.f), materialID, curveSphereRadius);
+
+    VertexData v = loadVertexData(hit, rayOrigin, float3(0.f), materialID);
     float3 viewDir = normalize(prevVertexPosition - v.posW);
-    ShadingData sd = prepareShadingData(v, materialID, gScene.materials[materialID], gScene.materialResources[materialID], viewDir, lod);
-    adjustShadingData(sd, hit, curveSphereRadius, v, isPrimary);
+    ShadingData sd = gScene.materials.prepareShadingData(v, materialID, viewDir, lod);
+    // adjustShadingData(sd, hit, curveSphereRadius, v, isPrimary);
     return sd;
 }
 
@@ -158,12 +196,14 @@ ShadingData loadShadingDataWithPrevVertexPosition(const HitInfo hit, const float
     \param[in] ddy footprint vector.
     \return ShadingData struct.
 */
-ShadingData loadShadingDataFootprint(const HitInfo hit, const float3 viewDir, const bool isPrimary, const float2 ddx, const float2 ddy)
+ShadingData loadShadingDataFootprint(const HitInfo hit, const float3 rayOrigin, const float3 rayDir, const float2 ddx, const float2 ddy)
 {
-    float curveSphereRadius = {};
     uint materialID = {};
-    VertexData v = loadVertexData(hit, viewDir, materialID, curveSphereRadius);
-    ShadingData sd = prepareShadingData(v, materialID, gScene.materials[materialID], gScene.materialResources[materialID], viewDir, ddx, ddy);
-    adjustShadingData(sd, hit, curveSphereRadius, v, isPrimary);
+    // only diff is using footprint vector to create texture LOD sampler
+    ExplicitGradientTextureSampler lod = { ddx, ddy };
+
+    VertexData v = loadVertexData(hit, rayOrigin, rayDir, materialID);
+    ShadingData sd = gScene.materials.prepareShadingData(v, materialID, -rayDir, lod);
+    // adjustShadingData(sd, hit, curveSphereRadius, v, isPrimary);
     return sd;
 }
