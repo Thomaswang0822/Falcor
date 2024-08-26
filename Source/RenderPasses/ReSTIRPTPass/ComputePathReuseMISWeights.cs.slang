@@ -21,6 +21,7 @@ import Rendering.Materials.MaterialShading;
 */
 struct PathReusePass
 {
+    // NEIGHBOR_OFFSET_COUNT will be passed in with defines.add()
     static const uint kNeighborOffsetCount = NEIGHBOR_OFFSET_COUNT;
     static const uint kNeighborOffsetMask = kNeighborOffsetCount - 1;
 
@@ -47,6 +48,10 @@ struct PathReusePass
 
     bool isValidScreenRegion(int2 pixel) { return all(pixel >= 0 && pixel < params.frameDim); }
 
+
+    /// 2024 UPDATE:
+    /// Previously, struct HitInfo stores unpacked data in an array of uint.
+    /// Now HitInfo has a PackedHitInfo field directly.
     ShadingData getPixelShadingData(int2 pixel, out PackedHitInfo PrimaryHitPacked)
     {
         ShadingData sd = {};
@@ -54,10 +59,11 @@ struct PathReusePass
         PrimaryHitPacked = vbuffer[pixel];
         if (isValidPackedHitInfo(PrimaryHitPacked))
         {
-            HitInfo PrimaryHit; PrimaryHit.unpack(PrimaryHitPacked);
+            // HitInfo PrimaryHit; PrimaryHit.unpack(PrimaryHitPacked);
+            HitInfo PrimaryHit = HitInfo(PrimaryHitPacked); // Initialize hit info from a packed hit info.
 
-            TriangleHit th = PrimaryHit.getTriangleHit();
-            sd = loadShadingData(PrimaryHit, -ray.dir, true);
+            let lod = ExplicitLodTextureSampler(0.f);
+            sd = loadShadingData(PrimaryHit, ray.origin, -ray.dir, lod);
         }
         return sd;
     }
@@ -69,7 +75,7 @@ struct PathReusePass
 
     int2 getPathReuseNextNeighborPixel(int4 NRookQuery, int2 pixel, int i)
     {
-        // 
+        //
         if (PathReusePattern(gSpatialReusePattern) == PathReusePattern::Block)
         {
             int2 block = pixel / 4;

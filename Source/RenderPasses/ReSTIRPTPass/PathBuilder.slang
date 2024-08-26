@@ -1,9 +1,9 @@
 /***************************************************************************
  # Copyright (c) 2022, Daqi Lin.  All rights reserved.
  **************************************************************************/
-#include "Scene/Material/MaterialDefines.slangh"
+// #include "Scene/Material/MaterialDefines.slangh"
 
-import Rendering.Materials.MaterialShading;
+// import Rendering.Materials.MaterialShading;
 import LoadShadingData;
 import Utils.Debug.PixelDebug;
 import Utils.Math.HashUtils;
@@ -11,7 +11,6 @@ import Params;
 import PathReservoir;
 import Rendering.Utils.PixelStats;
 import Scene.RaytracingInline;
-import Rendering.Materials.MaterialShading;
 import Utils.Sampling.TinyUniformSampleGenerator;
 
 #if BPR

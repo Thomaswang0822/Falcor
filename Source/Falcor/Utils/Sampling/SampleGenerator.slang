@@ -49,7 +49,7 @@ typedef TinyUniformSampleGenerator SampleGenerator;
 import Utils.Sampling.UniformSampleGenerator;
 typedef UniformSampleGenerator SampleGenerator;
 #else
-import Utils.Sampling.UniformSampleGenerator;
-typedef UniformSampleGenerator SampleGenerator;
+import Utils.Sampling.TinyUniformSampleGenerator;
+typedef TinyUniformSampleGenerator SampleGenerator;
 #endif
 

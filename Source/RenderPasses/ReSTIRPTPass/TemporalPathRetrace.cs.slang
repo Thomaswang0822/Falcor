@@ -31,7 +31,7 @@ struct PathRetracePass
     ByteAddressBuffer nRooksPattern;
 
     RWTexture2D<float4> outputColor;                      ///< Output resolved color.
-    RWStructuredBuffer<PathReservoir> outputReservoirs;                  
+    RWStructuredBuffer<PathReservoir> outputReservoirs;
     RWStructuredBuffer<PathReservoir> temporalReservoirs;
     RWStructuredBuffer<PixelReconnectionData> reconnectionDataBuffer;
 
@@ -48,6 +48,9 @@ struct PathRetracePass
 
     bool isValidScreenRegion(int2 pixel) { return all(pixel >= 0 && pixel < params.frameDim); }
 
+    /// 2024 UPDATE:
+    /// Previously, struct HitInfo stores unpacked data in an array of uint.
+    /// Now HitInfo has a PackedHitInfo field directly.
     ShadingData getPixelShadingData(int2 pixel, out PackedHitInfo PrimaryHitPacked)
     {
         ShadingData sd = {};
@@ -55,21 +58,33 @@ struct PathRetracePass
         PrimaryHitPacked = vbuffer[pixel];
         if (isValidPackedHitInfo(PrimaryHitPacked))
         {
-            HitInfo PrimaryHit; PrimaryHit.unpack(PrimaryHitPacked);
-            sd = loadShadingData(PrimaryHit, -ray.dir, true);
+            // HitInfo PrimaryHit; PrimaryHit.unpack(PrimaryHitPacked);
+            HitInfo PrimaryHit = HitInfo(PrimaryHitPacked); // Initialize hit info from a packed hit info.
+
+            let lod = ExplicitLodTextureSampler(0.f);
+            sd = loadShadingData(PrimaryHit, ray.origin, -ray.dir, lod);
         }
         return sd;
     }
 
-    ShadingData getPixelTemporalShadingData(int2 pixel, out PackedHitInfo PrimaryHitPacked)
+    /// 2024 UPDATE:
+    /// Previously, struct HitInfo stores unpacked data in an array of uint.
+    /// Now HitInfo has a PackedHitInfo field directly.
+    /// Also, computeRayPinholePrevFrame() is deprecated. It differs from computeRayPinhole()
+    /// only by using prev-frame camera jitter, which is also deprecated in 7.0 code.
+    /// Thus, we ignore camera jitters in prev frame and use computeRayPinhole() on prev-frame pixel.
+    ShadingData getPixelTemporalShadingData(int2 prevPixel, out PackedHitInfo PrimaryHitPacked)
     {
         ShadingData sd = {};
-        Ray ray = gScene.camera.computeRayPinholePrevFrame(pixel, params.frameDim);
-        PrimaryHitPacked = temporalVbuffer[pixel];
+        Ray ray = gScene.camera.computeRayPinhole(prevPixel, params.frameDim);
+        PrimaryHitPacked = temporalVbuffer[prevPixel];
         if (isValidPackedHitInfo(PrimaryHitPacked))
         {
-            HitInfo PrimaryHit; PrimaryHit.unpack(PrimaryHitPacked);
-            sd = loadShadingData(PrimaryHit, -ray.dir, true);
+            // HitInfo PrimaryHit; PrimaryHit.unpack(PrimaryHitPacked);
+            HitInfo PrimaryHit = HitInfo(PrimaryHitPacked); // Initialize hit info from a packed hit info.
+
+            let lod = ExplicitLodTextureSampler(0.f);
+            sd = loadShadingData(PrimaryHit, ray.origin, -ray.dir, lod);
         }
         return sd;
     }

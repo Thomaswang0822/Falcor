@@ -58,7 +58,7 @@ struct PathReusePass
 
     uint gSppId;
 
-    Texture2D<float4> directLighting;  
+    Texture2D<float4> directLighting;
     bool useDirectLighting;
 
     bool isValidPackedHitInfo(PackedHitInfo packed)
@@ -74,9 +74,12 @@ struct PathReusePass
         float3 camPos = gScene.camera.data.posW;
         float centralDist = distance(camPos, centralSd.posW);
         float neighborDist = distance(camPos, neighborSd.posW);
-        return dot(centralSd.N, neighborSd.N) >= 0.5f && abs(centralDist - neighborDist) < 0.1f * centralDist;
+        return dot(centralSd.frame.N, neighborSd.frame.N) >= 0.5f && abs(centralDist - neighborDist) < 0.1f * centralDist;
     }
 
+    /// 2024 UPDATE:
+    /// Previously, struct HitInfo stores unpacked data in an array of uint.
+    /// Now HitInfo has a PackedHitInfo field directly.
     ShadingData getPixelShadingData(int2 pixel, out PackedHitInfo PrimaryHitPacked)
     {
         ShadingData sd = {};
@@ -84,10 +87,11 @@ struct PathReusePass
         PrimaryHitPacked = vbuffer[pixel];
         if (isValidPackedHitInfo(PrimaryHitPacked))
         {
-            HitInfo PrimaryHit; PrimaryHit.unpack(PrimaryHitPacked);
+            // HitInfo PrimaryHit; PrimaryHit.unpack(PrimaryHitPacked);
+            HitInfo PrimaryHit = HitInfo(PrimaryHitPacked); // Initialize hit info from a packed hit info.
 
-            TriangleHit th = PrimaryHit.getTriangleHit();
-            sd = loadShadingData(PrimaryHit, -ray.dir, true);
+            let lod = ExplicitLodTextureSampler(0.f);
+            sd = loadShadingData(PrimaryHit, ray.origin, -ray.dir, lod);
         }
         return sd;
     }
@@ -111,7 +115,7 @@ struct PathReusePass
 
     int2 getPathReuseNextNeighborPixel(int4 NRookQuery, int2 pixel, int i)
     {
-        // 
+        //
         if (PathReusePattern(gSpatialReusePattern) == PathReusePattern::Block)
         {
             int2 block = pixel / 4;
@@ -144,7 +148,7 @@ struct PathReusePass
                 -gSmallWindowRadius + (i / smallWindowDiameter));
             if (all(neighborPixel == pixel)) neighborPixel = int2(-1);
         }
- 
+
         return neighborPixel;
     }
 
@@ -162,6 +166,16 @@ struct PathReusePass
         float centralM = dstReservoir.M;
         PackedHitInfo centralPrimaryHitPacked;
         ShadingData centralPrimarySd = getPixelShadingData(pixel, centralPrimaryHitPacked);
+
+        // Create a texture sampler and a material hints for primary hit
+        let lod = ExplicitLodTextureSampler(0.f);
+        HitInfo centralPrimaryHit = HitInfo(centralPrimaryHitPacked);
+        let centralHints = getMaterialInstanceHints(centralPrimaryHit, true /* isPrimary */);
+        // such that we can fetch a material instance
+        const IMaterialInstance centralMI = gScene.materials.getMaterialInstance(centralPrimarySd, lod, centralHints);
+        // and then a BSDFProperties
+        BSDFProperties centralBSDFprop = centralMI.getProperties(centralPrimarySd);
+
 
         if (!isValidPackedHitInfo(centralPrimaryHitPacked)) return;
 
@@ -227,7 +241,7 @@ struct PathReusePass
 
                 PathReservoir tempDstReservoir = dstReservoir;
 
-                if (i == pixelInBlock.x) 
+                if (i == pixelInBlock.x)
                 {
                     tempDstReservoir = neighborReservoir;
                     tempDstReservoir.rcVertexIrradiance[0] = tempDstReservoir.F;
@@ -375,7 +389,7 @@ struct PathReusePass
                 prefix_approxPdf = PathReservoir::computeWeight(prefixIntegrand) * prefixJacobian;
 
                 canonicalWeight += 1;
-                if (prefix_approxPdf > 0.f) 
+                if (prefix_approxPdf > 0.f)
                     canonicalWeight -= prefix_approxPdf * neighborReservoir.M / (prefix_approxPdf * neighborReservoir.M + centralReservoir.M * PathReservoir::computeWeight(centralReservoir.F) / (neighborCount));
 
                 PathReservoir tempDstReservoir = dstReservoir;
@@ -477,7 +491,7 @@ struct PathReusePass
                         {
                             chosen_approxPdf = PathReservoir::computeWeight(chosenReservoir.F) / chosen_Jacobian;
                             sum_approxPdf += chosen_approxPdf * chosenReservoir.M;
-                            count += chosenReservoir.M; 
+                            count += chosenReservoir.M;
 
                             continue;
                         }
@@ -557,7 +571,7 @@ struct PathReusePass
                 float hitDist = 0.f;
                 float3 reflectance = 0.f;
                 float3 radiance = 0.f;
-                NRDPathType pathType = NRDPathType::Residual; 
+                NRDPathType pathType = NRDPathType::Residual;
 
                 //
                 if (ShiftMapping(kShiftStrategy) == ShiftMapping::Reconnection ||
@@ -572,9 +586,9 @@ struct PathReusePass
                         bool isDiffusePrimaryHit = !dstReservoir.pathFlags.decodeIsSpecularBounce(true);
                         bool isSpecularPrimaryHit = dstReservoir.pathFlags.decodeIsSpecularBounce(true) && !dstReservoir.pathFlags.decodeIsDeltaEvent(true);
 
-                        reflectance = computeSampleReflectance(kUseNRDDemodulation, isDiffusePrimaryHit, isSpecularPrimaryHit, centralPrimarySd);
+                        reflectance = computeSampleReflectance(kUseNRDDemodulation, isDiffusePrimaryHit, isSpecularPrimaryHit, centralPrimarySd, centralBSDFprop);
 
-                        ShadingData RcVertexSd = loadShadingDataWithPrevVertexPosition(dstReservoir.rcVertexHit.getHitInfo(), centralPrimarySd.posW, false);
+                        ShadingData RcVertexSd = loadShadingDataWithPrevVertexPosition(dstReservoir.rcVertexHit.getHitInfo(), centralPrimarySd.posW, lod);
                         hitDist = length(RcVertexSd.posW - centralPrimarySd.posW);
 
                         pathType = NRDPathType::Residual;
@@ -586,7 +600,8 @@ struct PathReusePass
                 }
                 else
                 {
-                    HitInfo centralPrimaryHit; centralPrimaryHit.unpack(centralPrimaryHitPacked);
+                    // Has been created globally
+                    // HitInfo centralPrimaryHit = HitInfo(centralPrimaryHitPacked);
                     Ray ray = Ray(gScene.camera.getPosition(), -centralPrimarySd.V, 0, kRayTMax);
 
                     traceDenoiserData(params, centralPrimaryHitPacked, centralPrimarySd,

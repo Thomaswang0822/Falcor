@@ -1,5 +1,27 @@
 # Bug Log of ReSTIR PT
 
+## File Refactor Progress
+
+- [X] ComputePathReuseMISWeights.cs.slang
+- [ ] GeneratePaths.cs.slang (no error, but is different from 7.0 code; refactor likely needed)
+- [X] LoadShadingData.slang
+- [X] NRDHelpers.slang
+- [X] Params.slang (no change; kept Daqi's original)
+- [X] PathBuilder.slang
+- [X] PathReservoir.slang (no change; kept Daqi's original)
+- [X] PathState.slang (no change; kept Daqi's original; it's also in PT pass though)
+- [ ] PathTracer.slang
+- [X] ReflectTypes.cs.slang (no change; kept Daqi's original; dummy code to fit Falcor funcitonality)
+- [X] ReSTIRPTPass.cpp (compile, but likely need more work)
+- [X] ReSTIRPTPass.h (compile, but likely need more work)
+- [ ] Shift.slang
+- [X] SpatialPathRetrace.cs.slang
+- [X] SpatialReuse.cs.slang
+- [X] StaticParams.slang (no change; kept Daqi's original)
+- [X] TemporalPathRetrace.cs.slang
+- [X] TemporalReuse.cs.slang
+- [X] TracePass.cs.slang (no change; kept Daqi's original)
+
 ## createTexture2D() inconsistent bind-flags
 
 Error Msg:

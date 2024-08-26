@@ -61,9 +61,12 @@ struct PathRetracePass
         float3 camPos = gScene.camera.data.posW;
         float centralDist = distance(camPos, centralSd.posW);
         float neighborDist = distance(camPos, neighborSd.posW);
-        return dot(centralSd.N, neighborSd.N) >= 0.5f && abs(centralDist - neighborDist) < 0.1f * centralDist;
+        return dot(centralSd.frame.N, neighborSd.frame.N) >= 0.5f && abs(centralDist - neighborDist) < 0.1f * centralDist;
     }
 
+    /// 2024 UPDATE:
+    /// Previously, struct HitInfo stores unpacked data in an array of uint.
+    /// Now HitInfo has a PackedHitInfo field directly.
     ShadingData getPixelShadingData(int2 pixel, out PackedHitInfo PrimaryHitPacked)
     {
         ShadingData sd = {};
@@ -71,10 +74,11 @@ struct PathRetracePass
         PrimaryHitPacked = vbuffer[pixel];
         if (isValidPackedHitInfo(PrimaryHitPacked))
         {
-            HitInfo PrimaryHit; PrimaryHit.unpack(PrimaryHitPacked);
+            // HitInfo PrimaryHit; PrimaryHit.unpack(PrimaryHitPacked);
+            HitInfo PrimaryHit = HitInfo(PrimaryHitPacked); // Initialize hit info from a packed hit info.
 
-            TriangleHit th = PrimaryHit.getTriangleHit();
-            sd = loadShadingData(PrimaryHit, -ray.dir, true);
+            let lod = ExplicitLodTextureSampler(0.f);
+            sd = loadShadingData(PrimaryHit, ray.origin, -ray.dir, lod);
         }
         return sd;
     }

@@ -162,8 +162,8 @@ void adjustShadingData(inout ShadingData sd, const HitInfo hit, const float curv
 
 /** Setup ShadingData based on loaded vertex/material attributes for a hit point.
     \param[in] hit Hit information.
-    \param[in] viewDir Normalized view direction.
-    \param[in] isPrimary True if this is the primary hit point.
+    \param[in] rayOrigin ray origin.
+    \param[in] rayDir Normalized ray direction (= -viewDir).
     \param[in] lod level of detail bias value.
     \return ShadingData struct.
 */
@@ -176,12 +176,13 @@ ShadingData loadShadingData(const HitInfo hit, const float3 rayOrigin, const flo
     return sd;
 }
 
-// daqi: currently don't support DisplacedTriangle
-ShadingData loadShadingDataWithPrevVertexPosition(const HitInfo hit, const float3 prevVertexPosition, const float3 rayOrigin, const ITextureSampler lod)
+// daqi: currently don't support DisplacedTriangle, which uses rayDir
+ShadingData loadShadingDataWithPrevVertexPosition(const HitInfo hit, const float3 prevVertexPosition, const ITextureSampler lod)
 {
     uint materialID = {};
 
-    VertexData v = loadVertexData(hit, rayOrigin, float3(0.f), materialID);
+    // rayOrigin is just prevVertexPosition
+    VertexData v = loadVertexData(hit, prevVertexPosition, float3(0.f) /* rayDir */, materialID);
     float3 viewDir = normalize(prevVertexPosition - v.posW);
     ShadingData sd = gScene.materials.prepareShadingData(v, materialID, viewDir, lod);
     // adjustShadingData(sd, hit, curveSphereRadius, v, isPrimary);
