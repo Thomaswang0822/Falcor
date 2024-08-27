@@ -1,10 +1,38 @@
-// Let Slang VS Extension + Intellisense to understand code
-
 {
-    // Their actual values are passed in from scene definition at runtime
     "slang.predefinedMacros": [
+        "BPR=1",
+        "RCDATA_PATH_NUM=6",
         "USE_ENV_BACKGROUND=1",
-	    "RTXDI_INSTALLED=1"
+        "RTXDI_INSTALLED=1",
+        "USE_ALPHA_TEST=1",
+        "SAMPLES_PER_PIXEL=0",
+        "CANDIDATE_SAMPLES=0",
+        "MAX_SURFACE_BOUNCES=0",
+        "MAX_DIFFUSE_BOUNCES=0",
+        "MAX_SPECULAR_BOUNCES=0",
+        "MAX_TRANSMISSON_BOUNCES=0",
+        "ADJUST_SHADING_NORMALS=false",
+        "USE_BSDF_SAMPLING=false",
+        "USE_NEE=false",
+        "USE_MIS=false",
+        "USE_RUSSIAN_ROULETTE=false",
+        "USE_LIGHTS_IN_DIELECTRIC_VOLUMES=false",
+        "LIMIT_TRANSMISSION=0",
+        "MAX_TRANSMISSION_REFLECTION_DEPTH=0",
+        "MAX_TRANSMISSION_REFRACTION_DEPTH=0",
+        "DISABLE_CAUSTICS=false",
+        "DISABLE_DIRECT_ILLUMINATION=false",
+        "PRIMARY_LOD_MODE=0",
+        "COLOR_FORMAT=0",
+        "MIS_HEURISTIC=0",
+        "MIS_POWER_EXPONENT=0",
+        "SHIFT_STRATEGY=0",
+        "SPATIAL_RESTIR_MIS_KIND=0",
+        "TEMPORAL_RESTIR_MIS_KIND=0",
+        "TEMPORAL_UPDATE_FOR_DYNAMIC_SCENE=false",
+        "PATH_SAMPLING_MODE=0",
+        "SEPARATE_PATH_BSDF=false",
+        "USE_NRD_DEMODULATION=false"
     ],
     "slang.additionalSearchPaths": [
         "external/packman/nanovdb/include",

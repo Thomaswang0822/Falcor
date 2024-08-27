@@ -109,3 +109,54 @@ static struct Data
 ```
 
 This struct carries material info, but was not in Falcor 7.0 code. In 2022 code it's used as (in `evalDirectAnalytic()`) `gData.standardMaterial.eval(sd, ls.dir)`, and now it becomes `mi.eval(sd, ls.dir, sg)`, where `const IMaterialInstance mi` is the function arg.
+
+## Confusing wo vs wi
+
+This is a very serious bug that won't be reported by compiler or runtime (nightmare)! In essense, for doing BSDF sampling (a direction), 2022 code use `wi` as the sampled/scattered direction, which is very counter-intuitive. In Falcor 7.0 codebase, this has been changed. Thus, careful treatment is needed for related code.
+
+This problem is discovered, fortunately, during refactor of ***Shift.slang***, which imports ***Rendering.Materials.MaterialShading*** that is deprecated in Falcor 7.0 codebase.
+It contains a handful of BSDF-related function, (sample, eval pdf, eval BSDF, etc.), and they should correspond to functions in `IMaterialInstance` interface. I found it really hard to link old code and current code, then discovered the bug.
+
+Here is something that exists in both codebases (***ClothBRDF.slang***) that best shows the inconsistency.
+
+```cpp
+// Falcor 7.0 code
+bool sample<S : ISampleGenerator>(const float3 wi, out float3 wo, out float pdf, out float3 weight, out uint lobeType, inout S sg)
+{
+    wo = sample_cosine_hemisphere_concentric(sampleNext2D(sg), pdf);
+    lobeType = (uint)LobeType::DiffuseReflection;
+
+    if (min(wi.z, wo.z) < kMinCosTheta)
+    {
+        weight = {};
+        return false;
+    }
+
+    weight = evalWeight(wi, wo);
+    return true;
+}
+```
+
+```cpp
+// 2022 code
+bool sample<S : ISampleGenerator>(float3 wo, out float3 wi, out float pdf, out float3 weight, out uint lobe, inout S sg)
+{
+    wi = sample_cosine_hemisphere_concentric(sampleNext2D(sg), pdf);
+    lobe = (uint)LobeType::DiffuseReflection;
+
+    if (min(wo.z, wi.z) < kMinCosTheta)
+    {
+        weight = {};
+        return false;
+    }
+
+    weight = evalWeight(wo, wi);
+    return true;
+}
+```
+
+Daqi's 2022 code was heavily influenced by this inconsistency, since the `struct PathReservoir` has a field.
+
+```cpp
+    float3 rcVertexWi[kRcAttrCount]; // incident direction on reconnection vertex
+```

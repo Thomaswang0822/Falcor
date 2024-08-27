@@ -112,19 +112,17 @@ VertexData loadVertexData(const HitInfo hit, const float3 rayOrigin, const float
     return v;
 }
 
-/** Determine hints to use when creating the material instance.
+/**
+ * Determine hints to use when creating the material instance.
+ * This function is aligned with RTXDIPass, ScreenSpaceReSTIRPass,
+ * but not PathTracer.
  */
-uint getMaterialInstanceHints(const HitInfo hit, const bool isPrimary)
+uint getMaterialInstanceHints()
 {
     uint hints = 0;
-    if (hit.getType() == HitType::Triangle || hit.getType() == HitType::DisplacedTriangle)
-    {
 #if GBUFFER_ADJUST_SHADING_NORMALS
-        if (kAdjustShadingNormals || isPrimary) hints |= (uint)MaterialInstanceHints::AdjustShadingNormal;
-#else
-        if (kAdjustShadingNormals && !isPrimary) hints |= (uint)MaterialInstanceHints::AdjustShadingNormal;
+    hints |= (uint)MaterialInstanceHints::AdjustShadingNormal;
 #endif
-    }
     return hints;
 }
 

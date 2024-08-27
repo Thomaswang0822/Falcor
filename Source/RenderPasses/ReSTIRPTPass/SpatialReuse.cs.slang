@@ -170,7 +170,7 @@ struct PathReusePass
         // Create a texture sampler and a material hints for primary hit
         let lod = ExplicitLodTextureSampler(0.f);
         HitInfo centralPrimaryHit = HitInfo(centralPrimaryHitPacked);
-        let centralHints = getMaterialInstanceHints(centralPrimaryHit, true /* isPrimary */);
+        let centralHints = getMaterialInstanceHints();
         // such that we can fetch a material instance
         const IMaterialInstance centralMI = gScene.materials.getMaterialInstance(centralPrimarySd, lod, centralHints);
         // and then a BSDFProperties
