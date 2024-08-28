@@ -35,8 +35,13 @@ __exported import Params;
 
 uint getAllowedBSDFFlags(bool isSpecularBounce)
 {
-    if (kSeparatePathBSDF) return isSpecularBounce ? 0xc : 0x3;
-    else return -1;
+    if (kSeparatePathBSDF) {
+        return isSpecularBounce ?
+            0xc : // SpecularReflection and SpecularReflectionTransmission
+            0x3;  // DiffuseReflection and DiffuseTransmission
+    }
+    else
+        return -1;
 }
 
 struct PathTracer

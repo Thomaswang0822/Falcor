@@ -160,3 +160,213 @@ Daqi's 2022 code was heavily influenced by this inconsistency, since the `struct
 ```cpp
     float3 rcVertexWi[kRcAttrCount]; // incident direction on reconnection vertex
 ```
+
+Another layer of confusion arises because ReSTIRPT has both BSDF sampling and NEE (light sampling). In Falcor 7.0 context, which agrees with my personal commonsense:
+> In BSDF sampling,
+> incident direction `wi` is from shading vertex to previous vertex;
+> outgoing direction `wo` is the one being sampled by the model.
+>
+> In light sampling,
+> incident direction `wi` is the direction that connects shading vertex to sampled light;
+> outgoing direction `wo`, on the other hand, is from shading vertex to previous vertex.
+
+i.e. BSDF sampling generates `wo`, while NEE generates `wi`. But in 2022 code, `wo` and `wi` were flipped, and thus both sampling methods generate `wi`. This is why field `float3 rcVertexWi[kRcAttrCount]` is "incident direction" in 2022 code. It ought to be "sampled direction".
+
+With this in mind, those deprecated functions in ***Rendering.Materials.MaterialShading*** can then be refactored.
+
+## Deprecated MaterialShading Funtions
+
+In ***Rendering.Materials.MaterialShading***, there are a bunch of stand-alone functions which serves to accomodate legacy code.
+In Falcor 7.0, legacy code together with this file is fully deprecated. And corresponding functions is called through the member function of `IMaterialInstance` interface.
+
+Here is an example:
+
+```cs
+// In 2022 code, it was
+float dstPDF1 = evalPdfBSDF(dstPrimarySd, dstConnectionV);
+
+// Now in Falcor 7.0, first prepare the IMaterialInstance
+let hints = getMaterialInstanceHints(dstPrimaryHit, true /* isPrimary */);
+let dstMI = gScene.materials.getMaterialInstance(dstPrimarySd, lod, hints);
+// then call
+float dstPDF1 = dstMI.evalPdf(dstPrimarySd, dstConnectionV);
+```
+
+And there are a lot more tricky details. In both codebases, Material-related objects are a higher-level abstraction than BSDF-related objects. We can look at the actual function definitions in the above example:
+
+```cs
+/// 2022 code
+/** Evaluates the probability density function for both the diffuse and specular sampling strategy.
+    \param[in] sd Describes the shading point.
+    \param[in] L The normalized incident direction for which to evaluate the pdf.
+    \return Probability density with respect to solid angle from the shading point.
+*/
+float evalPdfBSDF(const ShadingData sd, float3 L, uint allowedSampledFlags = -1, bool allowDeltaEval = false)
+{
+    float3 wo = sd.toLocal(sd.V);
+    float3 wi = sd.toLocal(L);
+
+    FalcorBSDF bsdf;
+    bsdf.setup(sd);
+    return bsdf.evalPdf(wo, wi, allowedSampledFlags, allowDeltaEval);
+}
+
+/// 7.0 code
+// Member function of StandardMaterialInstance struct, which implements
+// evalPdf() signature of IMaterialInstance interface
+/** Evaluates the directional pdf for sampling the given direction.
+    \param[in] sd Shading data.
+    \param[in] wo Outgoing direction.
+    \param[in] useImportanceSampling Hint to use importance sampling, else default to reference implementation if available.
+    \return PDF with respect to solid angle for sampling direction wo (0 for delta events).
+*/
+float evalPdf(const ShadingData sd, const float3 wo, bool useImportanceSampling = true)
+{
+    float3 wiLocal = sf.toLocal(sd.V);
+    float3 woLocal = sf.toLocal(wo);
+
+    if (!isValidHemisphereReflectionOrTransmission(sd, sf, wiLocal, woLocal, wo)) return 0.f;
+
+    if (!useImportanceSampling)
+    {
+        return evalPdfReference(sd, wiLocal, woLocal);
+    }
+    else
+    {
+        StandardBSDF bsdf = StandardBSDF(wiLocal, sd.mtl, data);
+        return bsdf.evalPdf(wiLocal, woLocal);
+    }
+}
+```
+
+And we can see `FalcorBSDF` has been renamed to `StandardBSDF` with some updated functionality. The key difference is, previously, users can enable/disable evaluation of certain lobes via `uint allowedSampledFlags = -1, bool allowDeltaEval = false`, but now we lose this control, and evaluation is encapsulated in each BSDF implementation of the template. This
+is a good news, since the subtlety of which lobe to sample and whether delta event is handled by the polymorphic implementation of `IMaterialInstance` and `IBSDF` interfaces. In other words, each material and its underlying BSDF implementation will handle the subtlety for users.
+
+One bad news is, the 2022 code has overloaded version of evalPdf:
+
+```cs
+// It has an additional output pdfAll
+float evalPdfBSDF(const ShadingData sd, float3 L, out float pdfAll, uint allowedSampledFlags = -1, bool allowDeltaEval = false)
+{
+    float3 wo = sd.toLocal(sd.V);
+    float3 wi = sd.toLocal(L);
+
+    FalcorBSDF bsdf;
+    bsdf.setup(sd);
+    return bsdf.evalPdfAll(wo, wi, pdfAll, allowedSampledFlags, allowDeltaEval);
+}
+
+// And the above FalcorBSDF::evalPdfAll is
+float evalPdfAll(float3 wo, float3 wi, out float pdfAll, uint allowedSampledTypes = -1, bool allowDeltaEval = false)
+{
+    pdfAll = 0.f;
+    float pdfSingle = 0.f;
+    if (!allowDeltaEval && pDiffuseReflection > 0.f)
+    {
+        float pdf = pDiffuseReflection * diffuseReflection.evalPdf(wo, wi);
+        if (allowedSampledTypes & uint(SampledBSDFFlags::DiffuseReflection)) pdfSingle += pdf;
+        pdfAll += pdf;
+    }
+    if (!allowDeltaEval && pDiffuseTransmission > 0.f)
+    {
+        float pdf = pDiffuseTransmission * diffuseTransmission.evalPdf(wo, wi);
+        if (allowedSampledTypes & uint(SampledBSDFFlags::DiffuseTransmission)) pdfSingle += pdf;
+        pdfAll += pdf;
+    }
+    if (pSpecularReflection > 0.f)
+    {
+        float pdf = pSpecularReflection * specularReflection.evalPdf(wo, wi, allowDeltaEval);
+        if (allowedSampledTypes & uint(SampledBSDFFlags::SpecularReflection)) pdfSingle += pdf;
+        pdfAll += pdf;
+    }
+    if (pSpecularReflectionTransmission > 0.f)
+    {
+        float pdf = pSpecularReflectionTransmission * specularReflectionTransmission.evalPdf(wo, wi, allowDeltaEval);
+        if (allowedSampledTypes & uint(SampledBSDFFlags::SpecularReflectionTransmission)) pdfSingle += pdf;
+        pdfAll += pdf;
+    }
+    return pdfSingle;
+}
+```
+
+The output parameter `pdfAll` should store the "proper" pdf, while the return value `pdfSingle` only counts a subset of values according to `uint allowedSampledTypes`, which is a compression of several `enum class SampledBSDFFlags`. But none of the BSDF extending the `interface IBSDF` in Falcor 7.0 has this freedom.
+
+***The following is my personal understanding and could be wrong.***
+> It's possible that these 2 control flags aren't used properly here.
+> To be more specific, the flag is `bool allowDeltaEval` in the above
+> legacy function `evalPdfAll()`. But when used in ReSTIRPT, the flag is
+> called `isDelta2`. The former encodes whether users allow delta event
+> evaluation, and the latter encodes whether the material/BSDF has a delta
+> event (yes for glass and no for diffuse).
+>
+> As we have established, in Falcor 7.0, the internal detail "whether the material/BSDF has a delta event" will be handled by the implementation. And
+> the `allowDeltaEval` control is **completely gone**. Rigorously,
+> the pdf should be evaluated to 0 for delta event, so very likely, this part in 2022 code is buggy.
+> This can be seen from the following comparison.
+
+```cs
+/// 2022 code, in BxDF.slang
+/** Specular reflection and transmission using microfacets.
+*/
+struct SpecularReflectionTransmissionMicrofacet : IBxDF
+{
+    /// Some code ......
+
+    float3 eval(float3 wo, float3 wi, bool allowDeltaEval = false)
+    {
+        if (min(wo.z, abs(wi.z)) < kMinCosTheta) return float3(0.f);
+
+#if EnableDeltaBSDF
+        // Handle delta reflection/transmission.
+        if (alpha == 0.f)
+        {
+            // Handle delta reflection/transmission.
+            if (allowDeltaEval)
+            {
+                const bool isReflection = wi.z > 0.f;
+                float3 h = normalize(wi + wo * (isReflection ? 1.f : eta));
+                if (eta == 1.f && !isReflection && all(isnan(h))) h = float3(0, 0, 1); // wi = -wo case
+                h *= float(sign(h.z));
+
+                float woDotH = dot(wo, h);
+                float F = evalFresnelDielectric(eta, woDotH);
+
+                if (isReflection) return F;
+                else return (1.f - F) * transmissionAlbedo;
+            }
+            else
+                return float3(0.f);
+        }
+#endif
+        /// More code in the function
+    }
+}
+```
+
+```cs
+/// 7.0 code, in SpecularMicrofacet.slang
+/**
+ * Specular reflection and transmission using microfacets.
+ */
+struct SpecularMicrofacetBSDF : IBSDF, IDifferentiable
+{
+    /// Some code ......
+
+    [Differentiable]
+    float3 eval<S : ISampleGenerator>(const float3 wi, const float3 wo, inout S sg)
+    {
+        if (min(wi.z, abs(wo.z)) < kMinCosTheta)
+            return float3(0.f);
+
+#if EnableDeltaBSDF
+        // Handle delta reflection/transmission.
+        if (alpha == 0.f)
+            return float3(0.f);
+#endif
+        /// More code in the function
+    }
+}
+```
+
+> And the similar reasoning applies to `uint allowedSampledTypes`: it's also an internal detail that's handled by material implementation code. In `FalcorBSDF::evalPdfAll()`, output `pdfAll` differs by return value `pdfSingle` based on flag `uint allowedSampledTypes` ONLY. But very likely,
+> the lobes that are allowed to be sampled are the lobes that have nonzero contribution to the pdf. Thus, there can be just 1 instead of 2 pdf values.

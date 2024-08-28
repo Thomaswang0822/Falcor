@@ -9,7 +9,7 @@ import Utils.Sampling.SampleGenerator;
 import LoadShadingData;
 import Params;
 import Utils.Debug.PixelDebug;
-import Rendering.Materials.MaterialShading;
+// import Rendering.Materials.MaterialShading; // DEPRECATED
 import Rendering.Utils.PixelStats;
 import Scene.RaytracingInline;
 import Scene.Scene;
@@ -17,6 +17,15 @@ import PathTracer;
 import RenderPasses.Shared.Denoising.NRDData;
 
 ParameterBlock<PathTracer> gPathTracer;
+
+/// Function parameter NOTE:
+/// const ShadingData dstPrimarySd and const ShadingData srcPrimarySd are passed in with
+/// tneighborPrimarySd and centralPrimarySd respecively. (see {Spatial | Temporal}Reuse.cs.slang).
+/// They should mean ShadingData at temporal neightbor and ShadingData at current pixel.
+
+/*** Deprecated Rendering.Materials.MaterialShading code
+getBSDFLobes() -> IMaterialInstance::getLobeTypes()
+***/
 
 float3 computeShiftedIntegrandExtraOutput(
     const RestirPathTracerParams params, inout float dstJacobian, inout float output2, const PackedHitInfo dstPrimaryHitPacked, const ShadingData dstPrimarySd,
@@ -97,8 +106,10 @@ float3 computeShiftedIntegrandRandomReplay(const RestirPathTracerParams params, 
     dstJacobian = 1.f;
     PathReservoir srcReservoir = tempPathReservoir;
 
-    HitInfo dstPrimaryHit; dstPrimaryHit.unpack(dstPrimaryHitPacked);
-    Ray ray = Ray(gScene.camera.getPosition(usePrev), -dstPrimarySd.V, 0, kRayTMax);
+    // HitInfo dstPrimaryHit; dstPrimaryHit.unpack(dstPrimaryHitPacked);
+    HitInfo dstPrimaryHit = HitInfo(dstPrimaryHitPacked);
+    float3 camPos = usePrev ? gScene.camera.data.prevPosW : gScene.camera.data.posW;
+    Ray ray = Ray(camPos, -dstPrimarySd.V, 0, kRayTMax);
 
     float3 L = gPathTracer.traceRandomReplayPath(dstPrimaryHit, dstPrimarySd, srcPrimarySd, ray, tempPathReservoir);
 
@@ -122,8 +133,10 @@ float3 computeShiftedIntegrandHybrid(const RestirPathTracerParams params, bool u
 
     dstJacobian = 1.f;
 
-    HitInfo dstPrimaryHit; dstPrimaryHit.unpack(dstPrimaryHitPacked);
-    Ray ray = Ray(gScene.camera.getPosition(usePrev), -dstPrimarySd.V, 0, kRayTMax);
+    // HitInfo dstPrimaryHit; dstPrimaryHit.unpack(dstPrimaryHitPacked);
+    HitInfo dstPrimaryHit = HitInfo(dstPrimaryHitPacked);
+    float3 camPos = usePrev ? gScene.camera.data.prevPosW : gScene.camera.data.posW;
+    Ray ray = Ray(camPos, -dstPrimarySd.V, 0, kRayTMax);
     bool isRcVertexEscapedVertex = tempPathReservoir.pathFlags.pathLength() + 1 == tempPathReservoir.pathFlags.rcVertexLength();
 
     PathReservoir srcReservoir = tempPathReservoir;
@@ -132,19 +145,46 @@ float3 computeShiftedIntegrandHybrid(const RestirPathTracerParams params, bool u
     float3 dstRcPrevVertexWo;
     float3 Tp;
 
+    let lod = ExplicitLodTextureSampler(0.f);
+    // For dst vertex, create material instance and query its properties.
+    let hints = getMaterialInstanceHints(dstPrimaryHit, true /* isPrimary */);
+    let dstMI = gScene.materials.getMaterialInstance(dstPrimarySd, lod, hints);
+    let dstBsdfProperties = dstMI.getProperties(dstPrimarySd);
+
     if (srcReservoir.pathFlags.rcVertexLength() == 1)
     {
         Tp = 1.f;
-        dstRcPrevVertexHit.setValid();
+        /// dstRcPrevVertexHit.setValid();
+        /// HitInfo::setValid() is deprecated. Same thing is achieved by HitInfo::packHeader() in 7.0 code.
+        /**
+        [mutating] void setValid() {
+             data[0] = uint(HitType::Triangle) << kTypeOffset;
+        }
+        */
+        HitInfo::packHeader(dstRcPrevVertexHit.data, HitType::Triangle);
         dstRcPrevVertexWo = 1.f; // this value doesn't matter, as long as it is not all 0
 
         if (params.localStrategyType & (uint)LocalStrategy::RoughnessCondition)
         {
             bool isSpecularBounce = srcReservoir.pathFlags.decodeIsSpecularBounce(true);
 
+            /** The deprecated code is
+            bool hasRoughComponent(const ShadingData sd, float roughnessThreshold) {
+                return pDiffuseReflection > 0 || sd.linearRoughness > roughnessThreshold;
+            }
+            bool classifyAsRough(const ShadingData sd, float roughnessThreshold) {
+                return sd.linearRoughness > roughnessThreshold;
+            }
+            */
             bool isLastVertexClassifiedAsRough = kSeparatePathBSDF ?
-                (isSpecularBounce ? dstPrimarySd.linearRoughness > params.specularRoughnessThreshold : hasRoughComponent(dstPrimarySd, 1.f)) :
-                classifyAsRough(dstPrimarySd, params.specularRoughnessThreshold);
+                (isSpecularBounce ?
+                    dstBsdfProperties.roughness > params.specularRoughnessThreshold :
+                    // hasRoughComponent(dstPrimarySd, 1.f)
+                    dstBsdfProperties.roughness > 1.f
+                ) :
+                // classifyAsRough(dstPrimarySd, params.specularRoughnessThreshold);
+                dstBsdfProperties.roughness > params.specularRoughnessThreshold;
+
             if (!isLastVertexClassifiedAsRough)
             {
                 Tp = 0.f;
@@ -172,7 +212,12 @@ float3 computeShiftedIntegrandHybrid(const RestirPathTracerParams params, bool u
 
             if (srcReservoir.pathFlags.rcVertexLength() > 1)
             {
-                dstRcPrevVertexSd = loadShadingData(dstRcPrevVertexHit, dstRcPrevVertexWo, srcReservoir.pathFlags.rcVertexLength() == 1);
+                dstRcPrevVertexSd = loadShadingData(
+                    dstRcPrevVertexHit,
+                    float3(0.f), /* rayOrigin, only used in GEOMETRY_TYPE_SDF_GRID, which is not in ReSTIRPT*/
+                    -dstRcPrevVertexWo,  /* rayDir = -viewDir */
+                    lod
+                );
             }
 
             float reconnectionJacobian = 1.f;
@@ -204,8 +249,11 @@ float3 traceHybridShiftRays(const RestirPathTracerParams params, bool usePrev, c
     PathReservoir srcReservoir, inout HitInfo dstRcPrevVertexHit, inout float3 dstRcPrevVertexWo)
 {
     if (srcReservoir.weight == 0.f) return 0.f;
-    HitInfo dstPrimaryHit; dstPrimaryHit.unpack(dstPrimaryHitPacked);
-    Ray ray = Ray(gScene.camera.getPosition(usePrev), -dstPrimarySd.V, 0, kRayTMax); // this ray can be arbitrary, does not affect results
+    // HitInfo dstPrimaryHit; dstPrimaryHit.unpack(dstPrimaryHitPacked);
+    HitInfo dstPrimaryHit = HitInfo(dstPrimaryHitPacked);
+
+    float3 camPos = usePrev ? gScene.camera.data.prevPosW : gScene.camera.data.posW;
+    Ray ray = Ray(camPos, -dstPrimarySd.V, 0, kRayTMax); // this ray can be arbitrary, does not affect results
     float3 Tp = gPathTracer.traceRandomReplayPathHybridSimple(dstPrimaryHit, dstPrimarySd, ray, srcReservoir.pathFlags, srcReservoir.initRandomSeed, dstRcPrevVertexHit, dstRcPrevVertexWo);
     return Tp;
 }
@@ -214,7 +262,8 @@ float3 traceHybridShiftRays(const RestirPathTracerParams params, bool usePrev, c
 void traceDenoiserData(const RestirPathTracerParams params, const PackedHitInfo dstPrimaryHitPacked, const ShadingData dstPrimarySd,
     ReSTIRPathFlags pathFlags, uint initRandomSeed, inout float hitDist, inout NRDPathType pathType, inout float3 sampleReflectance)
 {
-    HitInfo dstPrimaryHit; dstPrimaryHit.unpack(dstPrimaryHitPacked);
+    // HitInfo dstPrimaryHit; dstPrimaryHit.unpack(dstPrimaryHitPacked);
+    HitInfo dstPrimaryHit = HitInfo(dstPrimaryHitPacked);
     Ray ray = Ray(gScene.camera.getPosition(), -dstPrimarySd.V, 0, kRayTMax); // this ray can be arbitrary, does not affect results
     gPathTracer.traceRandomReplayGetDenoiserData(dstPrimaryHit, dstPrimarySd, ray, pathFlags,
         initRandomSeed, hitDist, pathType, sampleReflectance);
@@ -244,10 +293,11 @@ float3 computeShiftedIntegrandReconnectionPathTree(const RestirPathTracerParams 
     {
         return 0.f;
     }
-    bool isTransmission = srcReservoir.pathFlags.decodeIsTransmissionEvent(true, false);
+    bool isTransmission = srcReservoir.pathFlags.decodeIsTransmissionEvent(true /* beforeRcVertex */);
 
-    srcPrimarySd.posW = srcPrimarySd.computeNewRayOrigin(!isTransmission);
-    dstPrimarySd.posW = dstPrimarySd.computeNewRayOrigin(!isTransmission);
+    /// \param[in] viewside True if the origin should be on the view side (reflection) or false otherwise (transmission).
+    srcPrimarySd.posW = srcPrimarySd.computeRayOrigin(!isTransmission);
+    dstPrimarySd.posW = dstPrimarySd.computeRayOrigin(!isTransmission);
 
     bool isDelta1 = srcReservoir.pathFlags.decodeIsDeltaEvent(true);
     bool isDelta2 = srcReservoir.pathFlags.decodeIsDeltaEvent(false);
@@ -257,7 +307,17 @@ float3 computeShiftedIntegrandReconnectionPathTree(const RestirPathTracerParams 
         if (any(srcPrimarySd.posW != dstPrimarySd.posW))
             return 0.f;
 
-    ShadingData rcVertexSd = loadShadingDataWithPrevVertexPosition(rcVertexHit, dstPrimarySd.posW, false);
+    let lod = ExplicitLodTextureSampler(0.f);
+    ShadingData rcVertexSd = loadShadingDataWithPrevVertexPosition(rcVertexHit, dstPrimarySd.posW, lod);
+    // get MaterialInstance of src, dst, and rc
+    let srcHints = (uint)MaterialInstanceHints::None; // @see getMaterialInstanceHints()
+    let dstHints = (uint)MaterialInstanceHints::None;
+    let rcHints = getMaterialInstanceHints(rcVertexHit, false /* isPrimary */);
+    let srcMI = gScene.materials.getMaterialInstance(srcPrimarySd, lod, srcHints);
+    let dstMI = gScene.materials.getMaterialInstance(dstPrimarySd, lod, dstHints);
+    let rcMI = gScene.materials.getMaterialInstance(rcVertexSd, lod, rcHints);
+    // and a SampleGenerator since MaterialInstance::eval() needs it
+    SampleGenerator sg = SampleGenerator(srcReservoir.initRandomSeed);
 
     // need to evaluate source PDF of BSDF sampling
     float3 dstConnectionV = -rcVertexSd.V; // direction point from dst primary hit point to reconnection vertex
@@ -279,15 +339,18 @@ float3 computeShiftedIntegrandReconnectionPathTree(const RestirPathTracerParams 
     uint allowedSampledTypes1 = getAllowedBSDFFlags(srcReservoir.pathFlags.decodeIsSpecularBounce(true));
 
     // assuming bsdf sampling
-    float dstPDF1 = evalPdfBSDF(dstPrimarySd, dstConnectionV, allowedSampledTypes1, isDelta1);
-    float srcPDF1 = evalPdfBSDF(srcPrimarySd, srcConnectionV, allowedSampledTypes1, isDelta1); //
+    // float dstPDF1 = evalPdfBSDF(dstPrimarySd, dstConnectionV, allowedSampledTypes1, isDelta1);
+    float dstPDF1 = dstMI.evalPdf(dstPrimarySd, dstConnectionV);
+    // float srcPDF1 = evalPdfBSDF(srcPrimarySd, srcConnectionV, allowedSampledTypes1, isDelta1);
+    float srcPDF1 = srcMI.evalPdf(srcPrimarySd, dstConnectionV);
 
     Jacobian *= dstPDF1 / srcPDF1; // this is the only jacobian we need for computing MIS weight for path reuse NEE
 
     if (isJacobianInvalid(Jacobian)) return 0.f;
 
-    float3 dstF1 = evalBSDFCosine(dstPrimarySd, dstConnectionV, allowedSampledTypes1, isDelta1);
-    float3 dstIntegrand = dstF1 / dstPDF1; 
+    // float3 dstF1 = evalBSDFCosine(dstPrimarySd, dstConnectionV, allowedSampledTypes1, isDelta1);
+    float3 dstF1 = dstMI.eval(dstPrimarySd, dstConnectionV, sg);
+    float3 dstIntegrand = dstF1 / dstPDF1;
 
     float3 dstIntegrandNEE;
 
@@ -297,9 +360,11 @@ float3 computeShiftedIntegrandReconnectionPathTree(const RestirPathTracerParams 
     dstIntegrandNEE = 0.f;
     if (kUseNEE && any(srcReservoir.rcVertexIrradiance[1] > 0.f))
     {
-        float3 dstF2NEE = evalBSDFCosine(rcVertexSd, srcReservoir.rcVertexWi[1]);
+        // float3 dstF2NEE = evalBSDFCosine(rcVertexSd, srcReservoir.rcVertexWi[1]);
+        float3 dstF2NEE = rcMI.eval(rcVertexSd, srcReservoir.rcVertexWi[1], sg);
         float dstPDF2NEE = srcReservoir.rcLightPdf;
-        float dstRcVertexNEEScatterPdf = evalPdfBSDF(rcVertexSd, srcReservoir.rcVertexWi[1]);
+        // float dstRcVertexNEEScatterPdf = evalPdfBSDF(rcVertexSd, srcReservoir.rcVertexWi[1]);
+        float dstRcVertexNEEScatterPdf = rcMI.evalPdf(rcVertexSd, srcReservoir.rcVertexWi[1]);
 
         dstIntegrandNEE = dstF2NEE / dstPDF2NEE * srcReservoir.rcVertexIrradiance[1];
         float misWeightNEE = 1.f;
@@ -321,11 +386,20 @@ float3 computeShiftedIntegrandReconnectionPathTree(const RestirPathTracerParams 
         float dstRcVertexScatterPdfAll = 0.f;
 
         // assuming bsdf sampling
-        float dstRcVertexScatterPdf = evalPdfBSDF(rcVertexSd, rcVertexWi, dstRcVertexScatterPdfAll, allowedSampledTypes2, isDelta2);
-        float srcRcVertexScatterPdf = evalPdfBSDFWithV(rcVertexSd, -srcConnectionV, rcVertexWi, allowedSampledTypes2, isDelta2);
+        // float dstRcVertexScatterPdf = evalPdfBSDF(rcVertexSd, rcVertexWi, dstRcVertexScatterPdfAll, allowedSampledTypes2, isDelta2);
+        float dstRcVertexScatterPdf = rcMI.evalPdf(rcVertexSd, rcVertexWi);
+        dstRcVertexScatterPdfAll = dstRcVertexScatterPdf; // @see debug log
+
+        /// Other than setting sd.V = V for the `in ShadingData sd`, evalPdfBSDFWithV() has no difference than evalPdfBSDF().
+        /// And NOTE float3 dstConnectionV = -rcVertexSd.V; has been executed earlier.
+        // float srcRcVertexScatterPdf = evalPdfBSDFWithV(rcVertexSd, -srcConnectionV, rcVertexWi, allowedSampledTypes2, isDelta2);
+        rcVertexSd.V = -srcConnectionV;
+        float srcRcVertexScatterPdf = rcMI.evalPdf(rcVertexSd, rcVertexWi);
+        rcVertexSd.V = -dstConnectionV;
         float dstPDF2 = dstRcVertexScatterPdf;
 
-        float3 dstF2 = evalBSDFCosine(rcVertexSd, rcVertexWi, allowedSampledTypes2, isDelta2);
+        // float3 dstF2 = evalBSDFCosine(rcVertexSd, rcVertexWi, allowedSampledTypes2, isDelta2);
+        float3 dstF2 = rcMI.eval(rcVertexSd, rcVertexWi, sg);
 
         float lightPdfBSDFSampling = srcReservoir.lightPdf;
 
@@ -397,10 +471,20 @@ float3 computeShiftedIntegrandReconnection(const RestirPathTracerParams params, 
     bool isTransmission = srcReservoir.pathFlags.decodeIsTransmissionEvent(true);
     uint allowedSampledTypes1 = getAllowedBSDFFlags(srcReservoir.pathFlags.decodeIsSpecularBounce(true));
 
-    srcPrimarySd.posW = srcPrimarySd.computeNewRayOrigin(!isTransmission);
-    dstPrimarySd.posW = dstPrimarySd.computeNewRayOrigin(!isTransmission);
+    /// \param[in] viewside True if the origin should be on the view side (reflection) or false otherwise (transmission).
+    srcPrimarySd.posW = srcPrimarySd.computeRayOrigin(!isTransmission);
+    dstPrimarySd.posW = dstPrimarySd.computeRayOrigin(!isTransmission);
 
-    if (!rcVertexHitExists) 
+    let lod = ExplicitLodTextureSampler(0.f);
+    // get MaterialInstance of src, dst; that of rc is created later
+    let srcHints = (uint)MaterialInstanceHints::None; // @see getMaterialInstanceHints()
+    let dstHints = (uint)MaterialInstanceHints::None;
+    let srcMI = gScene.materials.getMaterialInstance(srcPrimarySd, lod, srcHints);
+    let dstMI = gScene.materials.getMaterialInstance(dstPrimarySd, lod, dstHints);
+    // and a SampleGenerator since MaterialInstance::eval() needs it
+    SampleGenerator sg = SampleGenerator(srcReservoir.initRandomSeed);
+
+    if (!rcVertexHitExists)
     {
         float3 dstIntegrand = 0.f;
         // are we having a infinite light as rcVertex?
@@ -410,11 +494,14 @@ float3 computeShiftedIntegrandReconnection(const RestirPathTracerParams params, 
             bool isVisible = evalSegmentVisibility(dstPrimarySd.posW, wi, true); // test along a direction
             if (isVisible)
             {
-                float srcPDF1 = useCachedJacobian ? srcReservoir.cachedJacobian.x : evalPdfBSDF(srcPrimarySd, wi);
+                float srcPDF1 = useCachedJacobian ? srcReservoir.cachedJacobian.x : srcMI.evalPdf(srcPrimarySd, wi);
                 float dstPDF1All;
-                float dstPDF1 = evalPdfBSDF(dstPrimarySd, wi, dstPDF1All, allowedSampledTypes1);
+                // float dstPDF1 = evalPdfBSDF(dstPrimarySd, wi, dstPDF1All, allowedSampledTypes1);
+                float dstPDF1 = dstMI.evalPdf(dstPrimarySd, wi);
+                dstPDF1All = dstPDF1; // @see debug log
                 dstCachedJacobian.x = dstPDF1;
-                float3 dstF1 = evalBSDFCosine(dstPrimarySd, wi, allowedSampledTypes1);
+                // float3 dstF1 = evalBSDFCosine(dstPrimarySd, wi, allowedSampledTypes1);
+                float3 dstF1 = dstMI.eval(dstPrimarySd, wi, sg);
                 float misWeight = PathTracer::evalMIS(1, dstPDF1All, 1, srcReservoir.lightPdf);//   dstPDF1 / (dstPDF1 + srcReservoir.lightPdf);
                 dstIntegrand = dstF1 / dstPDF1 * misWeight * rcVertexIrradiance;
                 dstJacobian = dstPDF1 / srcPDF1;
@@ -441,7 +528,10 @@ float3 computeShiftedIntegrandReconnection(const RestirPathTracerParams params, 
     // delta bounce before/after rcVertex (if isRcVertexNEE, deltaAfterRc won't be set)
     if (isDelta1 || isDelta2) return 0.f;
 
-    ShadingData rcVertexSd = loadShadingDataWithPrevVertexPosition(rcVertexHit, dstPrimarySd.posW, false);
+    ShadingData rcVertexSd = loadShadingDataWithPrevVertexPosition(rcVertexHit, dstPrimarySd.posW, lod);
+    // MaterialInstance of reconnection vertex
+    let rcHints = getMaterialInstanceHints(rcVertexHit, false /* isPrimary */);
+    let rcMI = gScene.materials.getMaterialInstance(rcVertexSd, lod, rcHints);
 
     // need to evaluate source PDF of BSDF sampling
     float3 dstConnectionV = -rcVertexSd.V; // direction point from dst primary hit point to reconnection vertex
@@ -475,29 +565,44 @@ float3 computeShiftedIntegrandReconnection(const RestirPathTracerParams params, 
 
     // assuming bsdf sampling
     float dstPDF1All = 0.f;
-    float dstPDF1 = evalPdfBSDF(dstPrimarySd, dstConnectionV, dstPDF1All, allowedSampledTypes1);
+
+    // float dstPDF1 = evalPdfBSDF(dstPrimarySd, dstConnectionV, dstPDF1All, allowedSampledTypes1);
+    float dstPDF1 = dstMI.evalPdf(dstPrimarySd, dstConnectionV);
+    dstPDF1All = dstPDF1; // @see debug log
+
     dstCachedJacobian.x = dstPDF1;
-    float srcPDF1 = useCachedJacobian ? srcReservoir.cachedJacobian.x : evalPdfBSDF(srcPrimarySd, srcConnectionV, allowedSampledTypes1); //
+    float srcPDF1 = useCachedJacobian ?
+        srcReservoir.cachedJacobian.x :
+        // evalPdfBSDF(srcPrimarySd, srcConnectionV, allowedSampledTypes1);
+        srcMI.evalPdf(srcPrimarySd, srcConnectionV);
 
     Jacobian *= dstPDF1 / srcPDF1;
 
     if (isJacobianInvalid(Jacobian)) return 0.f;
 
-    float3 dstF1 = evalBSDFCosine(dstPrimarySd, dstConnectionV, allowedSampledTypes1);
+    // float3 dstF1 = evalBSDFCosine(dstPrimarySd, dstConnectionV, allowedSampledTypes1);
+    float3 dstF1 = dstMI.eval(dstPrimarySd, dstConnectionV, sg);
 
     float dstRcVertexScatterPdfAll = 0.f;
     float dstPDF2 = 1.f;
-    float dstRcVertexScatterPdf = 1.f; 
-    float srcRcVertexScatterPdf = 1.f;  
+    float dstRcVertexScatterPdf = 1.f;
+    float srcRcVertexScatterPdf = 1.f;
 
     uint allowedSampledTypes2 = isRcVertexNEE ? -1 : getAllowedBSDFFlags(srcReservoir.pathFlags.decodeIsSpecularBounce(false));
 
     if (!isRcVertexEscapedVertex)
     {
         // assuming bsdf sampling
-        dstRcVertexScatterPdf = evalPdfBSDF(rcVertexSd, rcVertexWi, dstRcVertexScatterPdfAll, allowedSampledTypes2);
+        // dstRcVertexScatterPdf = evalPdfBSDF(rcVertexSd, rcVertexWi, dstRcVertexScatterPdfAll, allowedSampledTypes2);
+        dstRcVertexScatterPdf = rcMI.evalPdf(rcVertexSd, rcVertexWi);
+        dstRcVertexScatterPdfAll = dstRcVertexScatterPdf; // @see debug log
+
+        // dstRcVertexScatterPdf = rcMI.evalPdf(rcVertexSd, rcVertexWi);
         dstCachedJacobian.y = dstRcVertexScatterPdf;
-        srcRcVertexScatterPdf = useCachedJacobian ? srcReservoir.cachedJacobian.y : evalPdfBSDFWithV(rcVertexSd, -srcConnectionV, rcVertexWi, allowedSampledTypes2);
+        srcRcVertexScatterPdf = useCachedJacobian ?
+            srcReservoir.cachedJacobian.y :
+            // evalPdfBSDFWithV(rcVertexSd, -srcConnectionV, rcVertexWi, allowedSampledTypes2);
+            rcMI.evalPdf(rcVertexSd, -srcConnectionV);
 
         if (!isRcVertexNEE) dstPDF2 = dstRcVertexScatterPdf;
         else dstPDF2 = srcReservoir.lightPdf;
@@ -505,8 +610,11 @@ float3 computeShiftedIntegrandReconnection(const RestirPathTracerParams params, 
 
     float3 dstF2 = 1.f;
 
-    if (!isRcVertexEscapedVertex)
-        dstF2 = evalBSDFCosine(rcVertexSd, rcVertexWi, allowedSampledTypes2);
+    if (!isRcVertexEscapedVertex) {
+        // dstF2 = evalBSDFCosine(rcVertexSd, rcVertexWi, allowedSampledTypes2);
+        dstF2 = rcMI.eval(rcVertexSd, rcVertexWi, sg);
+    }
+        
 
     // connection point behind surface
     if (all(dstF1 == 0.f) || all(dstF2 == 0.f)) return 0.f;
@@ -528,7 +636,7 @@ float3 computeShiftedIntegrandReconnection(const RestirPathTracerParams params, 
         {
             float lightPdf = srcReservoir.lightPdf;
             float misWeight = PathTracer::evalMIS(1, isRcVertexNEE ? lightPdf : dstRcVertexScatterPdfAll, 1, isRcVertexNEE ? dstRcVertexScatterPdfAll : lightPdf);
-            dstIntegrand = dstIntegrand * misWeight; 
+            dstIntegrand = dstIntegrand * misWeight;
             dstIntegrandNoF1 = dstIntegrandNoF1 * misWeight;
             if (!isRcVertexNEE)
                 Jacobian *= dstRcVertexScatterPdf / srcRcVertexScatterPdf;
@@ -553,7 +661,7 @@ float3 computeShiftedIntegrandReconnection(const RestirPathTracerParams params, 
 
     if (any(isnan(dstIntegrand) || isinf(dstIntegrand))) return 0.f;
 
-    if (params.rejectShiftBasedOnJacobian)
+    if (params.rejectShiftBasedOnJacobian != 0)
     {
         if (Jacobian > 0.f && (max(Jacobian, 1 / Jacobian) > 1 + params.jacobianRejectionThreshold))
         {
@@ -647,7 +755,7 @@ bool evalSegmentVisibility(const float3 sourceVertex, const float3 targetVertex,
         tMax *= 0.999f; // prevent intersection with another surface
     }
 
-    RayDesc ray = { sourceVertex, 0.f, dir, tMax }; // TODO: use offset position instead
+    Ray ray = { sourceVertex, 0.f, dir, tMax }; // TODO: use offset position instead
 
     SceneRayQuery<kUseAlphaTest> sceneRayQuery;
     return sceneRayQuery.traceVisibilityRay(ray, RAY_FLAG_NONE, 0xff);
@@ -656,6 +764,6 @@ bool evalSegmentVisibility(const float3 sourceVertex, const float3 targetVertex,
 bool traceVisibilityRay(const Ray ray)
 {
     SceneRayQuery<kUseAlphaTest> sceneRayQuery;
-    return sceneRayQuery.traceVisibilityRay(ray.toRayDesc(), RAY_FLAG_NONE, 0xff);
+    return sceneRayQuery.traceVisibilityRay(ray, RAY_FLAG_NONE, 0xff);
 }
 
