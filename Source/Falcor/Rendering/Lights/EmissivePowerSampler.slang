@@ -122,4 +122,12 @@ struct EmissivePowerSampler : IEmissiveLightSampler
         // The final probability density is the product of the sampling probabilities.
         return triangleSelectionPdf * trianglePdf;
     }
+
+    void skipRandomNumber<S : ISampleGenerator>(inout S sg)
+    {
+        if (gScene.lightCollection.isEmpty()) return;
+        sampleNext1D(sg);
+        sampleNext1D(sg);
+        sampleNext2D(sg);
+    }
 };
