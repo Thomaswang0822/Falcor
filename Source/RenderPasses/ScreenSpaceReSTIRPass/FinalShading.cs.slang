@@ -9,7 +9,7 @@
  **************************************************************************/
 import LoadShadingData;
 import Scene.RaytracingInline;
-import Rendering.Materials.StandardMaterial;
+// import Rendering.Materials.StandardMaterial;
 import Rendering.Materials.Microfacet;
 import Rendering.Materials.IsotropicGGX;
 import Rendering.ScreenSpaceReSTIR.ScreenSpaceReSTIR;
@@ -35,7 +35,7 @@ struct FinalShading
     Texture2D<PackedHitInfo> vbuffer;
 
     ScreenSpaceReSTIR screenSpaceReSTIR;
-    StandardMaterial standardMaterial;
+    // StandardMaterial standardMaterial;
 
     uint2 frameDim;
 
@@ -79,14 +79,6 @@ struct FinalShading
                 {
                     valid = false;
                 }
-
-                //sd.setActiveLobes((uint)LobeType::DiffuseReflection);
-                //diffuse = standardMaterial.eval(sd, dir) * Li;
-
-                //sd.setActiveLobes((uint)LobeType::SpecularReflection);
-                //specular = standardMaterial.eval(sd, dir) * Li;
-
-                //hitT = distance;
             }
 
             // Evaluate diffuse and specular lobes.

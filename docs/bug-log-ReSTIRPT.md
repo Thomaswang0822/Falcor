@@ -83,7 +83,7 @@ D:\Code\Falcor\build\windows-vs2022\bin\Debug\shaders\Rendering\ScreenSpaceReSTI
 
 A "lovely" bug because the error msg is very informative. The reason under the hood is that Falcor 7.0 uses `Ray` to abstract the API-specific (to DXR) `RayDesc` struct.
 
-## Curr TODO
+## Deprecated StandardMaterial Usage
 
 Error Msg:
 
@@ -109,6 +109,8 @@ static struct Data
 ```
 
 This struct carries material info, but was not in Falcor 7.0 code. In 2022 code it's used as (in `evalDirectAnalytic()`) `gData.standardMaterial.eval(sd, ls.dir)`, and now it becomes `mi.eval(sd, ls.dir, sg)`, where `const IMaterialInstance mi` is the function arg.
+
+The final solution turned to be eaiser than the investigation. Just look at ***FinalShading.cs.slang*** in ***RTXDIPass***: the function and related usage of `StandardMaterial` is up-to-date there.
 
 ## Confusing wo vs wi
 
@@ -370,3 +372,35 @@ struct SpecularMicrofacetBSDF : IBSDF, IDifferentiable
 
 > And the similar reasoning applies to `uint allowedSampledTypes`: it's also an internal detail that's handled by material implementation code. In `FalcorBSDF::evalPdfAll()`, output `pdfAll` differs by return value `pdfSingle` based on flag `uint allowedSampledTypes` ONLY. But very likely,
 > the lobes that are allowed to be sampled are the lobes that have nonzero contribution to the pdf. Thus, there can be just 1 instead of 2 pdf values.
+***END OF personal understanding.***
+
+## Curr TODO
+
+Error Msg:
+
+```shell
+Assertion failed: this
+
+D:\Code\Falcor\Source\Falcor\Core\API\Resource.cpp:133 (asTexture)
+
+Stacktrace:
+ 0# Falcor::getStackTrace at D:\Code\Falcor\Source\Falcor\Core\Platform\OS.cpp:334
+ 1# Falcor::reportAssertion at D:\Code\Falcor\Source\Falcor\Core\Error.cpp:60
+ 2# Falcor::detail::reportAssertion at D:\Code\Falcor\Source\Falcor\Core\Error.h:160
+ 3# Falcor::Resource::asTexture at D:\Code\Falcor\Source\Falcor\Core\API\Resource.cpp:133
+ 4# <lambda_5a9451d12dd38060d6ddc28f9e1498a5>::operator() at D:\Code\Falcor\Source\RenderPasses\ScreenSpaceReSTIRPass\ScreenSpaceReSTIRPass.cpp:373
+ ......
+```
+
+```cs
+/// in ScreenSpaceReSTIRPass::finalShading()
+
+    // Bind output channels as UAV buffers.
+    var = mpFinalShadingPass->getRootVar();
+    auto bind = [&](const ChannelDesc& channel)
+    {
+        ref<Texture> pTex = renderData[channel.name]->asTexture();
+        var[channel.texname] = pTex;
+    };
+    for (const auto& channel : kOutputChannels) bind(channel);
+```
