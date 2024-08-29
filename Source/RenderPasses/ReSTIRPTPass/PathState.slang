@@ -5,6 +5,7 @@ import Utils.Math.PackedFormats;
 import PathBuilder;
 import PathReservoir;
 __exported import Scene.HitInfo;
+__exported import Utils.Math.Ray;
 __exported import Utils.Sampling.SampleGenerator;
 import Rendering.Materials.InteriorListHelpers;
 
@@ -182,10 +183,9 @@ struct PathState
 
     uint getLength() { return length; }
 
-    RayDesc getScatterRay()
+    Ray getScatterRay()
     {
-        RayDesc ray = { origin, 0.f, dir, kRayTMax };
-        return ray;
+        return Ray( origin, dir, 0.f, kRayTMax );
     }
 
     // Helpers for packing the full path state.
