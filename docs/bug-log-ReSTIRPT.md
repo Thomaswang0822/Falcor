@@ -374,7 +374,7 @@ struct SpecularMicrofacetBSDF : IBSDF, IDifferentiable
 > the lobes that are allowed to be sampled are the lobes that have nonzero contribution to the pdf. Thus, there can be just 1 instead of 2 pdf values.
 ***END OF personal understanding.***
 
-## Curr TODO
+## asTexture() assertion error
 
 Error Msg:
 
@@ -404,3 +404,18 @@ Stacktrace:
     };
     for (const auto& channel : kOutputChannels) bind(channel);
 ```
+
+The solution turns out to be simple: use `getTexture()` instead of `asTexture()`, because `asTexture()` doesn't allow nullptr Texture, while `getTexture()` does.
+
+## Curr TODO
+
+Error Msg:
+
+```shell
+(Info) Begin execute() on pass: ReSTIRPTPass
+(Error) Caught an exception:
+
+invalid map<K, T> key
+```
+
+Good news is ScreenSpaceReSTIRPass is now error-free. Bad thing is this bug has no stack trace info.

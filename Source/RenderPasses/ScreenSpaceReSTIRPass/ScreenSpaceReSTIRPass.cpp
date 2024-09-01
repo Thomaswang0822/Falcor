@@ -52,7 +52,7 @@ extern "C" FALCOR_API_EXPORT void registerPlugin(Falcor::PluginRegistry& registr
 
 void ScreenSpaceReSTIRPass::reset()
 {
-    
+
 }
 
 void ScreenSpaceReSTIRPass::registerBindings(pybind11::module& m)
@@ -62,7 +62,7 @@ void ScreenSpaceReSTIRPass::registerBindings(pybind11::module& m)
     pass.def_property_readonly("pixelStats", &ScreenSpaceReSTIRPass::getPixelStats);
 
     /// There isn't a params.slang that defines SSReSTIRParams, thus no mParams exists.
-    /// 
+    ///
     /*pass.def_property(
         "useFixedSeed",
         [](const ScreenSpaceReSTIRPass* pt) { return pt->mParams.useFixedSeed ? true : false; },
@@ -241,7 +241,8 @@ void ScreenSpaceReSTIRPass::execute(RenderContext* pRenderContext, const RenderD
         }
     };
     // Copy debug output if available. (only support first ReSTIR instance for now)
-    if (const auto& pDebug = renderData["debug"]->asTexture())
+    // if (const auto& pDebug = renderData["debug"]->asTexture())
+    if (const auto& pDebug = renderData.getTexture("debug"))
     {
         copyTexture(pDebug.get(), mpScreenSpaceReSTIR[0]->getDebugOutputTexture().get());
     }
@@ -361,12 +362,32 @@ void ScreenSpaceReSTIRPass::finalShading(
 
     // Bind output channels as UAV buffers.
     var = mpFinalShadingPass->getRootVar();
-    auto bind = [&](const ChannelDesc& channel)
+    auto bind = [&](const ChannelDesc& desc)
     {
-        ref<Texture> pTex = renderData[channel.name]->asTexture();
-        var[channel.texname] = pTex;
+        // ref<Texture> pTex = renderData[channel.name]->asTexture();
+        // var[channel.texname] = pTex;
+
+        /// asTexture() doesn't allow nullptr Texture, while getTexture() does.
+        if (!desc.texname.empty())
+        {
+            ref<Texture> pTexture = renderData.getTexture(desc.name);
+            if (pTexture && (mFrameDim.x != pTexture->getWidth() || mFrameDim.y != pTexture->getHeight()))
+            {
+                logError(
+                    "Texture {} has dim {}x{}, not compatible with the FrameDim {}x{}.",
+                    pTexture->getName(),
+                    pTexture->getWidth(),
+                    pTexture->getHeight(),
+                    mFrameDim.x,
+                    mFrameDim.y
+                );
+            }
+            var[desc.texname] = pTexture;
+        }
     };
-    for (const auto& channel : kOutputChannels) bind(channel);
+    for (const auto& channel : kOutputChannels) {
+        bind(channel);
+    }
 
     mpFinalShadingPass->execute(pRenderContext, mFrameDim.x, mFrameDim.y);
 }
