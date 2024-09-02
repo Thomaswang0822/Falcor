@@ -9,7 +9,6 @@ import Utils.Sampling.SampleGenerator;
 import LoadShadingData;
 import Params;
 import Utils.Debug.PixelDebug;
-// import Rendering.Materials.MaterialShading; // DEPRECATED
 import Rendering.Utils.PixelStats;
 import Scene.RaytracingInline;
 import Scene.Scene;
@@ -614,7 +613,7 @@ float3 computeShiftedIntegrandReconnection(const RestirPathTracerParams params, 
         // dstF2 = evalBSDFCosine(rcVertexSd, rcVertexWi, allowedSampledTypes2);
         dstF2 = rcMI.eval(rcVertexSd, rcVertexWi, sg);
     }
-        
+
 
     // connection point behind surface
     if (all(dstF1 == 0.f) || all(dstF2 == 0.f)) return 0.f;

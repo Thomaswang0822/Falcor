@@ -13,7 +13,6 @@ import Utils.Sampling.TinyUniformSampleGenerator;
 import Utils.Math.Ray;
 import Utils.Math.MathHelpers;
 import LoadShadingData;
-import Rendering.Materials.MaterialShading;
 import RenderPasses.Shared.Denoising.NRDData;
 import RenderPasses.Shared.Denoising.NRDBuffers;
 import RenderPasses.Shared.Denoising.NRDConstants;
@@ -170,7 +169,7 @@ struct PathReusePass
         // Create a texture sampler and a material hints for primary hit
         let lod = ExplicitLodTextureSampler(0.f);
         HitInfo centralPrimaryHit = HitInfo(centralPrimaryHitPacked);
-        let centralHints = getMaterialInstanceHints();
+        let centralHints = getMaterialInstanceHints(centralPrimaryHit, true /* isPrimary */);
         // such that we can fetch a material instance
         const IMaterialInstance centralMI = gScene.materials.getMaterialInstance(centralPrimarySd, lod, centralHints);
         // and then a BSDFProperties

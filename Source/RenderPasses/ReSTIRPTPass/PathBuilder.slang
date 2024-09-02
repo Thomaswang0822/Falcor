@@ -3,7 +3,6 @@
  **************************************************************************/
 // #include "Scene/Material/MaterialDefines.slangh"
 
-// import Rendering.Materials.MaterialShading;
 import LoadShadingData;
 import Utils.Debug.PixelDebug;
 import Utils.Math.HashUtils;

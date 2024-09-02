@@ -12,7 +12,6 @@ import Rendering.Utils.PixelStats;
 import Utils.Sampling.TinyUniformSampleGenerator;
 import Utils.Math.Ray;
 import LoadShadingData;
-import Rendering.Materials.MaterialShading;
 
 /** TODO.
 */

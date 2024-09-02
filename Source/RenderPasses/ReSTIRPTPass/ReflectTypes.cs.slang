@@ -9,6 +9,9 @@
      Therefore we create this dummy program to make it easier.
  */
 import PathReservoir;
+import PathTracer;
+
+ParameterBlock<PathTracer> pathTracer;
 
 StructuredBuffer<PathReservoir> outputReservoirs;
 StructuredBuffer<PixelReconnectionData> reconnectionDataBuffer;

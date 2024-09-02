@@ -7,10 +7,7 @@ import Rendering.Lights.EnvMapSampler;
 import Rendering.Lights.EmissiveLightSampler;
 import Rendering.Lights.EmissiveLightSamplerHelpers;
 import Rendering.Lights.LightHelpers;
-import Rendering.Materials.StandardMaterial;
-import Rendering.Materials.ClothMaterial;
-import Rendering.Materials.HairMaterial;
-// import Rendering.Materials.MaterialShading;
+import Rendering.Materials.IsotropicGGX;
 import Rendering.Materials.Microfacet;
 import Rendering.Materials.InteriorListHelpers;
 import Rendering.Volumes.HomogeneousVolumeSampler;
@@ -32,6 +29,10 @@ import PathReservoir;
 
 __exported import PathState;
 __exported import Params;
+
+#ifndef OUTPUT_TIME
+#error OUTPUT_TIME is missing defines
+#endif
 
 uint getAllowedBSDFFlags(bool isSpecularBounce)
 {
@@ -251,7 +252,7 @@ struct PathTracer
         path.origin = ray.origin;
         path.dir = ray.dir;
 
-        path.sg = SampleGenerator(randomSeed); 
+        path.sg = SampleGenerator(randomSeed);
 
         path.randomReplayIsNEE = isLastVertexNEE && !isRcVertexEscapedVertex;
         path.randomReplayIsEscaped = !isLastVertexNEE && !isRcVertexEscapedVertex;
@@ -324,7 +325,7 @@ struct PathTracer
         /// Thus, a single line should be enough.
         valid = mi.sample(sd, path.sg, result);
 
-        
+
         float pdfAll = result.pdf;
         /*
         if (kSeparatePathBSDF)
@@ -755,6 +756,7 @@ struct PathTracer
     bool selectLightType(out uint lightType, out float pdf, inout SampleGenerator sg)
     {
         float p[3];
+        pdf = {};
         getLightTypeSelectionProbabilities(p);
 
         float u = sampleNext1D(sg);
@@ -1097,7 +1099,7 @@ struct PathTracer
             sd.mtl.setEmissive(false /* isEmissive*/); // likely useless, just be safe
             bsdfProp.emission = float3(0.f);
         }
-            
+
 
         // Disable specular lobes if caustics are disabled and path already contains a diffuse vertex.
         if (kDisableCaustics && path.getBounces(BounceType::Diffuse) > 0 && bsdfProp.roughness <= params.specularRoughnessThreshold)
@@ -1121,8 +1123,8 @@ struct PathTracer
 
         if (path.length == 1 && !path.isTransmission() && !path.isDelta()) computeEmissive = false;
 
-        // daqi: when doing random number replay, we will terminate the path when the length reaches the base path length and 
-        // when the path types match. In this case, if the base path is a escaped path (as opposed to an NEE path), we should terminate when we 
+        // daqi: when doing random number replay, we will terminate the path when the length reaches the base path length and
+        // when the path types match. In this case, if the base path is a escaped path (as opposed to an NEE path), we should terminate when we
         // find that offset path can also be an escaped path
         bool terminateRandomReplayForEscape = path.enableRandomReplay && path.length - 1 == path.randomReplayLength && path.randomReplayIsEscaped && path.randomReplayLength >= 1;
 
@@ -1163,7 +1165,7 @@ struct PathTracer
 
             attenuatedEmission = path.getCurrentThp() * bsdfProp.emission; //only used for primary hit
 
-            // daqi: Since ScreenSpaceReSTIR cannot handle transmission and delta reflection, we must include the contribution in the color buffer 
+            // daqi: Since ScreenSpaceReSTIR cannot handle transmission and delta reflection, we must include the contribution in the color buffer
             if (!path.enableRandomReplay || terminateRandomReplayForEscape)
             {
                 if (!kDisableDirectIllumination || path.length > 1) path.L += Lr;
@@ -1183,7 +1185,7 @@ struct PathTracer
                     path.length - 1 == path.pathBuilder.rcVertexLength ? path.thp * bsdfProp.emission * misWeight : path.rcVertexPathTreeIrradiance,
                     path.useHybridShift, path.russianRoulettePdf, misWeight, lightPdf, (uint)LightSampleType::Emissive, path.pathReservoir, path.enableRandomReplay);
 #else
-                bool selectedCurrentPath = path.pathBuilder.addEscapeVertex(params, max(0, path.length - 1), path.dir, Lr, path.thp * bsdfProp.emission * misWeight, 
+                bool selectedCurrentPath = path.pathBuilder.addEscapeVertex(params, max(0, path.length - 1), path.dir, Lr, path.thp * bsdfProp.emission * misWeight,
                     path.useHybridShift, path.russianRoulettePdf, misWeight, lightPdf, (uint)LightSampleType::Emissive, path.pathReservoir, path.enableRandomReplay);
 #endif
 
@@ -1198,7 +1200,7 @@ struct PathTracer
 
                     if (!(params.localStrategyType & (uint)LocalStrategy::DistanceCondition && !isFarField || params.localStrategyType & (uint)LocalStrategy::RoughnessCondition && !isLastVertexAcceptableForRcPrev))
                     {
-                        if (path.isReplayForHybridShift) // non-invertible case 
+                        if (path.isReplayForHybridShift) // non-invertible case
                         {
                             path.L = 0.f;
                         }
@@ -1261,8 +1263,8 @@ struct PathTracer
         // Check if lights should be sampled.
         bool sampleLights = applyNEE;
 
-        // daqi: when doing random number replay, we will terminate the path when the length reaches the base path length and 
-        // when the path types match. In this case, if the base path is a NEE path (as opposed to an escaped path), we should terminate when we 
+        // daqi: when doing random number replay, we will terminate the path when the length reaches the base path length and
+        // when the path types match. In this case, if the base path is a NEE path (as opposed to an escaped path), we should terminate when we
         // find that offset path can also be an NEE path
         bool terminateRandomReplayForNEE = path.enableRandomReplay && path.length == path.randomReplayLength && path.randomReplayIsNEE;
 
@@ -1344,11 +1346,11 @@ struct PathTracer
             {
                 // not possible to generate a diffuse bounce if
                 if (params.localStrategyType & (uint)LocalStrategy::RoughnessCondition && // we do check roughness
-                    ( // && if not rough enough 
-                        (kSeparatePathBSDF && 
+                    ( // && if not rough enough
+                        (kSeparatePathBSDF &&
                             (
-                                path.pathBuilder.pathFlags.decodeIsSpecularBounce(true) 
-                                ? bsdfProp.roughness <= params.specularRoughnessThreshold 
+                                path.pathBuilder.pathFlags.decodeIsSpecularBounce(true)
+                                ? bsdfProp.roughness <= params.specularRoughnessThreshold
                                 // : !hasRoughComponent(sd, 1.f)
                                 : !(bsdfProp.roughness > 1.f)
                             )
@@ -1466,7 +1468,7 @@ struct PathTracer
                                     path.rcVertexPathTreeIrradiance += weight * ls.Li * path.thp;
                                 }
 
-                                bool selected = path.pathBuilder.addNeeVertex(params, path.length, ls.dir, Lr, 
+                                bool selected = path.pathBuilder.addNeeVertex(params, path.length, ls.dir, Lr,
                                     is_rcVertex ? weight * ls.Li * path.thp : path.rcVertexPathTreeIrradiance, path.useHybridShift,
                                     path.russianRoulettePdf, misWeight, ls.pdf, ls.lightType, path.pathReservoir, path.enableRandomReplay);
 #else
@@ -1544,7 +1546,7 @@ struct PathTracer
             {
                 if (is_rcVertex)
                 {
-                    is_rcVertex = false; 
+                    is_rcVertex = false;
                     path.pathBuilder.rcVertexLength = kMaximumPathLength; // reset
                 }
             }
@@ -1639,13 +1641,13 @@ struct PathTracer
             float3 Le = envMapSampler.eval(path.dir);
             float3 Lr = path.getCurrentThp() * Le * misWeight;
 
-            // daqi: when doing random number replay, we will terminate the path when the length reaches the base path length and 
-            // when the path types match. In this case, if the base path is a escaped path (as opposed to an NEE path), we should terminate when we 
+            // daqi: when doing random number replay, we will terminate the path when the length reaches the base path length and
+            // when the path types match. In this case, if the base path is a escaped path (as opposed to an NEE path), we should terminate when we
             // find that offset path can also be an escaped path
             bool terminateRandomReplayForEscape = path.enableRandomReplay && path.length == path.randomReplayLength && path.randomReplayIsEscaped
                 && path.length >= 1;
 
-            // daqi: Since ScreenSpaceReSTIR cannot handle transmission and delta reflection, we must include the contribution in the color buffer 
+            // daqi: Since ScreenSpaceReSTIR cannot handle transmission and delta reflection, we must include the contribution in the color buffer
             if (!path.enableRandomReplay || terminateRandomReplayForEscape)
             {
                 if (!kDisableDirectIllumination || path.length > 0) path.L += Lr;
@@ -1662,11 +1664,11 @@ struct PathTracer
                 {
                     path.rcVertexPathTreeIrradiance += path.thp * Le * misWeight;
                 }
-                bool selectedCurrentPath = path.pathBuilder.addEscapeVertex(params, path.length, path.dir, Lr, 
+                bool selectedCurrentPath = path.pathBuilder.addEscapeVertex(params, path.length, path.dir, Lr,
                     path.length == path.pathBuilder.rcVertexLength ? path.thp * Le * misWeight : path.rcVertexPathTreeIrradiance,
                     path.useHybridShift, path.russianRoulettePdf, misWeight, lightPdf, (uint)LightSampleType::EnvMap, path.pathReservoir, path.enableRandomReplay);
 #else
-                bool selectedCurrentPath = path.pathBuilder.addEscapeVertex(params, path.length, path.dir, Lr, path.thp * Le * misWeight, 
+                bool selectedCurrentPath = path.pathBuilder.addEscapeVertex(params, path.length, path.dir, Lr, path.thp * Le * misWeight,
                     path.useHybridShift, path.russianRoulettePdf, misWeight, lightPdf, (uint)LightSampleType::EnvMap, path.pathReservoir, path.enableRandomReplay);
 #endif
                 // daqi: if current escaped vertex has path.length >= 2, then it can be used as a rcVertex
@@ -1677,7 +1679,7 @@ struct PathTracer
                     // daqi: in the case of escaped to infinitely far, we always satisfy the far field requirement
                     if (!(params.localStrategyType & (uint)LocalStrategy::RoughnessCondition && !isLastVertexAcceptableForRcPrev))
                     {
-                        if (path.isReplayForHybridShift) // non-invertible case 
+                        if (path.isReplayForHybridShift) // non-invertible case
                         {
                             path.L = 0.f;
                         }
@@ -1720,7 +1722,7 @@ struct PathTracer
 
         while (path.isActive() && path.isHit())
         {
-            // Handle surface hit 
+            // Handle surface hit
             if (path.isActive())
             {
                 if (path.isHit())
@@ -1775,7 +1777,7 @@ struct PathTracer
         while (path.isActive() && path.isHit())
         {
             // Volume scattering is ignored
-            // Handle surface hit 
+            // Handle surface hit
             if (path.isActive())
             {
                 if (path.isHit())
@@ -1839,7 +1841,7 @@ struct PathTracer
             if (path.isActive()) nextVertex(path);
             else
             {
-                // this shouldn't happen! 
+                // this shouldn't happen!
                 return;
             }
 
@@ -1866,7 +1868,7 @@ struct PathTracer
         let lod = ExplicitLodTextureSampler(0.f);
         ShadingData rcVertexSd = loadShadingDataWithPrevVertexPosition(tempPathReservoir.rcVertexHit.getHitInfo(), rcPrevSd.posW, lod);
         /// After loading data, load material resource
-        let hints = MaterialInstanceHints::None;
+        let hints = (uint)MaterialInstanceHints::None;
         let rcMI = gScene.materials.getMaterialInstance(rcVertexSd, lod, hints);
 
         PathState path;
@@ -1950,7 +1952,7 @@ struct PathTracer
             while (path.isActive() && path.isHit())
             {
                 // Volume scattering is ignored
-                // Handle surface hit 
+                // Handle surface hit
                 if (path.isActive())
                 {
                     if (path.isHit())
@@ -2060,7 +2062,7 @@ struct PathTracer
                 {
                     L = path.L / kSamplesPerPixel;
                 }
-                else 
+                else
                 {
                     L = giReservoir.F;
                     L += path.L / kSamplesPerPixel;
@@ -2105,7 +2107,7 @@ struct PathTracer
                     if (isLastRound)
                     {
                         float3 color = giReservoir.F * giReservoir.weight;
-                        
+
                         if (any(isinf(color) || isnan(color))) color = 0.f;
                         L += color;
                     }
@@ -2128,7 +2130,7 @@ struct PathTracer
             }
         }
 
-        if (kOutputNRDData && PathSamplingMode(kPathSamplingMode) == PathSamplingMode::PathTracing) 
+        if (kOutputNRDData && PathSamplingMode(kPathSamplingMode) == PathSamplingMode::PathTracing)
         {
             float3 diffuseRadiance = 0.f;
             float3 specularRadiance = 0.f;

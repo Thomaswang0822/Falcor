@@ -2,19 +2,21 @@
 
 ## File Refactor Progress
 
+FINISHED
+
 - [X] ComputePathReuseMISWeights.cs.slang
-- [ ] GeneratePaths.cs.slang (no error, but is different from 7.0 code; refactor likely needed)
+- [X] GeneratePaths.cs.slang (no error, but is different from 7.0 code; refactor likely needed)
 - [X] LoadShadingData.slang
 - [X] NRDHelpers.slang
 - [X] Params.slang (no change; kept Daqi's original)
 - [X] PathBuilder.slang
 - [X] PathReservoir.slang (no change; kept Daqi's original)
 - [X] PathState.slang (no change; kept Daqi's original; it's also in PT pass though)
-- [ ] PathTracer.slang
+- [X] PathTracer.slang
 - [X] ReflectTypes.cs.slang (no change; kept Daqi's original; dummy code to fit Falcor funcitonality)
 - [X] ReSTIRPTPass.cpp (compile, but likely need more work)
 - [X] ReSTIRPTPass.h (compile, but likely need more work)
-- [ ] Shift.slang
+- [X] Shift.slang
 - [X] SpatialPathRetrace.cs.slang
 - [X] SpatialReuse.cs.slang
 - [X] StaticParams.slang (no change; kept Daqi's original)
@@ -407,7 +409,7 @@ Stacktrace:
 
 The solution turns out to be simple: use `getTexture()` instead of `asTexture()`, because `asTexture()` doesn't allow nullptr Texture, while `getTexture()` does.
 
-## Curr TODO
+## Other host-side errors
 
 Error Msg:
 
@@ -418,4 +420,7 @@ Error Msg:
 invalid map<K, T> key
 ```
 
-Good news is ScreenSpaceReSTIRPass is now error-free. Bad thing is this bug has no stack trace info.
+There were a handful of other bugs that turned out to be neither challenging nor interesting. They were debugged by Debugger in VS
+\+ Falcor stack trace infrastructure.
+
+For example, the above error is caused by accessing some non-exisitant define in `DefineList`, a Falcor wrapper around std::map. Despite of not having a stack trace, its cause was quickly located by the Debugger.

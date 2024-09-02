@@ -42,11 +42,20 @@ void tracePath(uint pathID, inout PathReservoir giReservoir, uint sampleIdx)
     gPathTracer.writeOutput(path, giReservoir, sampleIdx);
 }
 
-[numthreads(16, 16, 1)]
-void main(uint3 dispatchThreadId : SV_DispatchThreadID)
+[shader("miss")]
+void scatterMiss(inout PathState path)
 {
-    uint2 pixel = dispatchThreadId.xy;
-    if (all(pixel >= gPathTracer.params.frameDim)) return;
+    gPathTracer.handleMiss(path);
+}
+
+// [numthreads(16, 16, 1)]
+// void main(uint3 dispatchThreadId : SV_DispatchThreadID)
+[shader("raygeneration")]
+void rayGen()
+{
+    uint2 pixel = DispatchRaysIndex().xy;
+    uint2 frameDim = DispatchRaysDimensions().xy;
+    if (all(pixel >= frameDim)) return;
 
     // Skip pixel if there is no hit in the vbuffer.
     HitInfo hit = HitInfo(gPathTracer.vbuffer[pixel]);

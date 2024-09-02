@@ -303,8 +303,8 @@ ReSTIRPTPass::ReSTIRPTPass(ref<Device> pDevice, const Properties& props) : Rende
 
     // Create programs
     auto defines = mStaticParams.getDefines(*this);
-    mpGeneratePaths = ComputePass::create(mpDevice, ProgramDesc().addShaderLibrary(kGeneratePathsFilename).csEntry("main"), defines, false);
-    mpReflectTypes = ComputePass::create(mpDevice, ProgramDesc().addShaderLibrary(kReflectTypesFile).csEntry("main"), defines, false);
+    // mpGeneratePaths = ComputePass::create(mpDevice, ProgramDesc().addShaderLibrary(kGeneratePathsFilename).csEntry("main"), defines, false);
+    // mpReflectTypes = ComputePass::create(mpDevice, ProgramDesc().addShaderLibrary(kReflectTypesFile).csEntry("main"), defines, false);
     //mpResolvePass = ComputePass::create(mpDevice, ProgramDesc().addShaderLibrary(kResolvePassFilename).csEntry("main"), defines, false);
 
     // TODO: should those new passes be created here or lazily?
@@ -1141,14 +1141,15 @@ ReSTIRPTPass::TracePass::TracePass(
     const uint32_t kRayTypeScatter = 0;
     const uint32_t kMissScatter = 0;
 
-    bool useSER = defines.at("USE_SER") == "1";
+    // bool useSER = defines.at("USE_SER") == "1";
 
     ProgramDesc desc;
     desc.addShaderModules(pScene->getShaderModules());
     desc.addShaderLibrary(kTracePassFilename);
-    if (pDevice->getType() == Device::Type::D3D12 && useSER)
+    if (pDevice->getType() == Device::Type::D3D12)
         desc.addCompilerArguments({"-Xdxc", "-enable-lifetime-markers"});
-    desc.setMaxPayloadSize(160); // This is conservative but the required minimum is 140 bytes.
+    /// D3D12 ERROR: ID3D12Device::CreateStateObject: Raytracing shader config specifies MaxPayloadSizeInBytes of 160 but function this config is associated with, "scatterMiss", has a larger payload size: 368 bytes.
+    desc.setMaxPayloadSize(400); // This is conservative but the required minimum is 140 bytes.
     desc.setMaxAttributeSize(pScene->getRaytracingMaxAttributeSize());
     desc.setMaxTraceRecursionDepth(1);
     if (!pScene->hasProceduralGeometry())
@@ -1172,6 +1173,7 @@ ReSTIRPTPass::TracePass::TracePass(
     {
         auto typeConformances = pScene->getMaterialSystem().getTypeConformances(materialType);
 
+        /*
         // Add hit groups for triangles.
         if (auto geometryIDs = pScene->getGeometryIDs(Scene::GeometryType::TriangleMesh, materialType); !geometryIDs.empty())
         {
@@ -1203,6 +1205,7 @@ ReSTIRPTPass::TracePass::TracePass(
                 desc.addHitGroup("scatterSdfGridClosestHit", "", "sdfGridIntersection", typeConformances, to_string(materialType));
             pBindingTable->setHitGroup(kRayTypeScatter, geometryIDs, shaderID);
         }
+        */
     }
 
     pProgram = Program::create(pDevice, desc, defines);
@@ -1286,6 +1289,36 @@ void ReSTIRPTPass::updatePrograms()
         desc.addShaderLibrary(kReflectTypesFile).csEntry("main");
         mpReflectTypes = ComputePass::create(mpDevice, desc, defines, false);
     }
+    if (!mpSpatialPathRetracePass)
+    {
+        ProgramDesc desc = baseDesc;
+        desc.addShaderLibrary(kSpatialPathRetraceFile).csEntry("main");
+        mpSpatialPathRetracePass = ComputePass::create(mpDevice, desc, defines, false);
+    }
+    if (!mpTemporalPathRetracePass)
+    {
+        ProgramDesc desc = baseDesc;
+        desc.addShaderLibrary(kTemporalPathRetraceFile).csEntry("main");
+        mpTemporalPathRetracePass = ComputePass::create(mpDevice, desc, defines, false);
+    }
+    if (!mpSpatialReusePass)
+    {
+        ProgramDesc desc = baseDesc;
+        desc.addShaderLibrary(kSpatialReusePassFile).csEntry("main");
+        mpSpatialReusePass = ComputePass::create(mpDevice, desc, defines, false);
+    }
+    if (!mpTemporalReusePass)
+    {
+        ProgramDesc desc = baseDesc;
+        desc.addShaderLibrary(kTemporalReusePassFile).csEntry("main");
+        mpTemporalReusePass = ComputePass::create(mpDevice, desc, defines, false);
+    }
+    if (!mpComputePathReuseMISWeightsPass)
+    {
+        ProgramDesc desc = baseDesc;
+        desc.addShaderLibrary(kComputePathReuseMISWeightsFile).csEntry("main");
+        mpComputePathReuseMISWeightsPass = ComputePass::create(mpDevice, desc, defines, false);
+    }
 
     // lambda function that update defines and reset vars
     auto preparePass = [&](ref<ComputePass> pass)
@@ -1320,6 +1353,10 @@ void ReSTIRPTPass::prepareResources(RenderContext* pRenderContext, const RenderD
     const uint32_t reservoirCount = tileCount * kScreenTileDim.x * kScreenTileDim.y;
     const uint32_t screenPixelCount = mParams.frameDim.x * mParams.frameDim.y;
     const uint32_t sampleCount = reservoirCount; // we are effectively only using 1spp for ReSTIR
+
+    mpCounters = mpDevice->createBuffer(
+        (size_t)Counters::kCount * sizeof(uint32_t)
+    );
 
     // Allocate output sample offset buffer if needed.
     // This buffer stores the output offset to where the samples for each pixel are stored consecutively.
@@ -2247,6 +2284,7 @@ DefineList ReSTIRPTPass::StaticParams::getDefines(const ReSTIRPTPass& owner) con
     defines.add("OUTPUT_GUIDE_DATA", "0");
     defines.add("OUTPUT_NRD_DATA", "0");
     defines.add("OUTPUT_NRD_ADDITIONAL_DATA", "0");
+    defines.add("OUTPUT_TIME", "0");
 
     // ReSTIR config
     defines.add("SPATIAL_RESTIR_MIS_KIND", std::to_string((uint32_t)spatialMisKind));

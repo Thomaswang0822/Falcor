@@ -13,7 +13,6 @@ import Utils.Sampling.TinyUniformSampleGenerator;
 import Utils.Math.Ray;
 import Utils.Math.MathHelpers;
 import LoadShadingData;
-import Rendering.Materials.MaterialShading;
 
 // if we don't use PathSamplingMode::PathReuse, this pass is used for computing contribution MIS weights
 
