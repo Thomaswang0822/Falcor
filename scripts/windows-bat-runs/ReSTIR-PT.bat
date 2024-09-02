@@ -3,4 +3,4 @@ call scripts\windows-bat-runs\common-vars.bat
 SET launch_name=ReSTIR PT
 echo Current run is %launch_name%
 
-%bin_path%\Debug\Mogwai.exe --script=%script_path%\ReSTIRPTDemo.py
+%bin_path%\Debug\Mogwai.exe --script=%script_path%\ReSTIRPTDemo.py --scene=%scene_path%\VeachAjar\VeachAjar.pyscene
