@@ -108,7 +108,7 @@ private:
     void prepareMaterials(RenderContext* pRenderContext);
     bool prepareLighting(RenderContext* pRenderContext);
 
-    //void prepareRTXDI(RenderContext* pRenderContext);  // not there in 2022
+    void prepareRTXDI(RenderContext* pRenderContext);  // not there in 2022
     void bindShaderData(const ShaderVar& var, const RenderData& renderData, bool isPathTracer, bool isPathGenerator) const;
     bool renderRenderingUI(Gui::Widgets& widget);
     bool renderDebugUI(Gui::Widgets& widget);
@@ -158,6 +158,7 @@ private:
         MISHeuristic misHeuristic = MISHeuristic::Balance; ///< MIS heuristic.
         float misPowerExponent = 2.f; ///< MIS exponent for the power heuristic. This is only used when 'PowerExp' is chosen.
         EmissiveLightSamplerType emissiveSampler = EmissiveLightSamplerType::Power; ///< Emissive light sampler to use for NEE.
+        bool useRTXDI = true;                                                      ///< Use RTXDI for direct illumination.
 
         bool useDeterministicBSDF = true; ///< Evaluate all compatible lobes at BSDF sampling time.
 
@@ -193,7 +194,6 @@ private:
         mNumSpatialRounds = 1;
         mEnableTemporalReprojection = false;
         mUseMaxHistory = true;
-        mUseDirectLighting = true;
         mTemporalHistoryLength = 20;
         mNoResamplingForTemporalReuse = false;
     }
@@ -202,6 +202,7 @@ private:
     RestirPathTracerParams mParams;            ///< Runtime path tracer parameters.
     StaticParams mStaticParams;                ///< Static parameters. These are set as compile-time constants in the shaders.
     mutable LightBVHSampler::Options mLightBVHOptions; ///< Current options for the light BVH sampler.
+    RTXDI::Options mRTXDIOptions;              ///< Current options for the RTXDI sampler.
 
     bool mEnabled = true; ///< Switch to enable/disable the path tracer. When disabled the pass outputs are cleared.
     RenderPassHelpers::IOSize mOutputSizeSelection = RenderPassHelpers::IOSize::Default; ///< Selected output size.
@@ -237,7 +238,7 @@ private:
     uint64_t mAccumulatedClosestHitRayCount = 0;
     uint64_t mAccumulatedShadowRayCount = 0;
 
-    // params below
+    // ReSTIR params below
     bool mEnableTemporalReuse = true;
     bool mEnableSpatialReuse = true;
     SpatialReusePattern mSpatialReusePattern = SpatialReusePattern::Default;
@@ -253,8 +254,6 @@ private:
     bool mUseMaxHistory = true;
 
     int mReservoirFrameCount = 0; // internal
-
-    bool mUseDirectLighting = true;
 
     int mTemporalHistoryLength = 20;
     bool mNoResamplingForTemporalReuse = false;

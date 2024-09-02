@@ -424,3 +424,17 @@ There were a handful of other bugs that turned out to be neither challenging nor
 \+ Falcor stack trace infrastructure.
 
 For example, the above error is caused by accessing some non-exisitant define in `DefineList`, a Falcor wrapper around std::map. Despite of not having a stack trace, its cause was quickly located by the Debugger.
+
+## Buggy ScreenSpaceReSTIR
+
+After fixing all errors (such that the runtime doesn't throw any), the rendering is all black. What a classic! Some quick inspection tells that `ScreenSpaceReSTIR` and `ScreenSpaceReSTIRPass` code on which `ReSTIRPTPass` relies, is buggy.
+
+`ScreenSpaceReSTIR` is essentially pre-2022-version ReSTIR DI + ReSTIR GI. Daqi coded ReSTIR PT on top of it. Thus, it's likely that I created some bug while integrating `ScreenSpaceReSTIR` into
+Falcor 7.0.
+
+A brutal solution is simply forgo `ScreenSpaceReSTIR` and disable "comparing with ReSTIR GI" feature. Now the direct lighting input of
+ReSTIRPT pass comes from RTXDI.
+
+Now, after all the ReSTIRPT operations, the final output is exactly the same as that of RTXDI. Next step is to (finally) shader-debug ReSTIRPT.
+
+NOTE for myself: The path flag used in PathReservoir by ReSTIRPT is incompatible with Falcor 7.0. Fix this first.

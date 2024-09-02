@@ -183,7 +183,10 @@ namespace
     const std::string kUseNEE = "useNEE";
     const std::string kUseMIS = "useMIS";
     const std::string kUseRussianRoulette = "useRussianRoulette";
-    const std::string kScreenSpaceReSTIROptions = "screenSpaceReSTIROptions";
+    // const std::string kScreenSpaceReSTIROptions = "screenSpaceReSTIROptions";
+    const std::string kUseRTXDI = "useRTXDI";
+    const std::string kRTXDIOptions = "RTXDIOptions";
+
     const std::string kUseAlphaTest = "useAlphaTest";
     const std::string kMaxNestedMaterials = "maxNestedMaterials";
     const std::string kUseLightsInDielectricVolumes = "useLightsInDielectricVolumes";
@@ -227,7 +230,6 @@ namespace
     const std::string kSpatialReusePattern = "spatialReusePattern";
     const std::string kSmallWindowRestirWindowRadius = "smallWindowRestirWindowRadius";
     const std::string kSpatialReuseRadius = "spatialReuseRadius";
-    const std::string kUseDirectLighting = "useDirectLighting";
     const std::string kSeparatePathBSDF = "separatePathBSDF";
     const std::string kCandidateSamples = "candidateSamples";
     const std::string kTemporalUpdateForDynamicScene = "temporalUpdateForDynamicScene";
@@ -322,8 +324,8 @@ void ReSTIRPTPass::setProperties(const Properties& props)
     validateOptions();
     if (auto lightBVHSampler = dynamic_cast<LightBVHSampler*>(mpEmissiveSampler.get()))
         lightBVHSampler->setOptions(mLightBVHOptions);
-    /*if (mpRTXDI)
-        mpRTXDI->setOptions(mRTXDIOptions);*/
+    if (mpRTXDI)
+        mpRTXDI->setOptions(mRTXDIOptions);
     mRecompile = true;
     mOptionsChanged = true;
 
@@ -360,6 +362,8 @@ void ReSTIRPTPass::parseProperties(const Properties& props)
         else if (key == kSpecularRoughnessThreshold) mParams.specularRoughnessThreshold = value;
         else if (key == kDisableDirectIllumination) mStaticParams.disableDirectIllumination = value;
         else if (key == kPrimaryLodMode)  mStaticParams.primaryLodMode = value;
+        else if (key == kUseRTXDI) mStaticParams.useRTXDI = value;
+        else if (key == kRTXDIOptions) mRTXDIOptions = value;
         // Denoising parameters
         else if (key == kUseNRDDemodulation) mStaticParams.useNRDDemodulation = value;
         else if (key == kColorFormat) mStaticParams.colorFormat = value;
@@ -388,7 +392,6 @@ void ReSTIRPTPass::parseProperties(const Properties& props)
         else if (key == kSpatialReusePattern) mSpatialReusePattern = value;
         else if (key == kSmallWindowRestirWindowRadius) mSmallWindowRestirWindowRadius = value;
         else if (key == kSpatialReuseRadius) mSpatialReuseRadius = value;
-        else if (key == kUseDirectLighting) mUseDirectLighting = value;
         else if (key == kSeparatePathBSDF) mStaticParams.separatePathBSDF = value;
         else if (key == kCandidateSamples) mStaticParams.candidateSamples = value;
         else if (key == kTemporalUpdateForDynamicScene) mStaticParams.temporalUpdateForDynamicScene = value;
@@ -528,8 +531,8 @@ Properties ReSTIRPTPass::getProperties() const
     if (mStaticParams.emissiveSampler == EmissiveLightSamplerType::LightBVH)
         props[kLightBVHOptions] = mLightBVHOptions;
     props[kUseRussianRoulette] = mStaticParams.useRussianRoulette;
-    //props[kUseRTXDI] = mStaticParams.useRTXDI;
-    //props[kRTXDIOptions] = mRTXDIOptions;
+    props[kUseRTXDI] = mStaticParams.useRTXDI;
+    props[kRTXDIOptions] = mRTXDIOptions;
 
     // Material parameters
     props[kUseAlphaTest] = mStaticParams.useAlphaTest;
@@ -572,7 +575,6 @@ Properties ReSTIRPTPass::getProperties() const
     props[kSpatialReusePattern] = mSpatialReusePattern;
     props[kSmallWindowRestirWindowRadius] = mSmallWindowRestirWindowRadius;
     props[kSpatialReuseRadius] = mSpatialReuseRadius;
-    props[kUseDirectLighting] = mUseDirectLighting;
     props[kSeparatePathBSDF] = mStaticParams.separatePathBSDF;
     props[kCandidateSamples] = mStaticParams.candidateSamples;
     props[kTemporalUpdateForDynamicScene] = mStaticParams.temporalUpdateForDynamicScene;
@@ -661,7 +663,6 @@ void ReSTIRPTPass::execute(RenderContext* pRenderContext, const RenderData& rend
 {
     if (!beginFrame(pRenderContext, renderData))
         return;
-    renderData.getDictionary()["enableScreenSpaceReSTIR"] = mUseDirectLighting;
 
     // Determine ReSTIR configs
     bool skipTemporalReuse = mReservoirFrameCount == 0;
@@ -813,8 +814,6 @@ bool ReSTIRPTPass::renderRenderingUI(Gui::Widgets& widget)
         }
     }
     */
-
-    dirty |= widget.checkbox("Direct lighting (ReSTIR DI)", mUseDirectLighting);
 
     bool pathSamplingModeChanged = widget.dropdown("Path Sampling Mode", kPathSamplingModeList, reinterpret_cast<uint32_t&>(mStaticParams.pathSamplingMode));
     if (pathSamplingModeChanged)
@@ -1658,6 +1657,25 @@ void ReSTIRPTPass::setNRDData(const ShaderVar& var, const RenderData& renderData
     var["primaryHitSpecularReflectance"] = renderData.getTexture(kOutputNRDSpecularReflectance);
 }
 
+void ReSTIRPTPass::prepareRTXDI(RenderContext* pRenderContext)
+{
+    if (mStaticParams.useRTXDI)
+    {
+        if (!mpRTXDI)
+            mpRTXDI = std::make_unique<RTXDI>(mpScene, mRTXDIOptions);
+
+        // Emit warning if enabled while using spp != 1.
+        if (!mFixedSampleCount || mStaticParams.samplesPerPixel != 1)
+        {
+            logWarning("Using RTXDI with samples/pixel != 1 will only generate one RTXDI sample reused for all pixel samples.");
+        }
+    }
+    else
+    {
+        mpRTXDI = nullptr;
+    }
+}
+
 void ReSTIRPTPass::bindShaderData(const ShaderVar& var, const RenderData& renderData, bool isPathTracer, bool isPathGenerator) const
 {
     // Bind static resources that don't change per frame.
@@ -1694,7 +1712,7 @@ void ReSTIRPTPass::bindShaderData(const ShaderVar& var, const RenderData& render
     if (isPathTracer)
     {
         var["isLastRound"] = !mEnableSpatialReuse && !mEnableTemporalReuse;
-        var["useDirectLighting"] = mUseDirectLighting;
+        var["useDirectLighting"] = mStaticParams.useRTXDI;;
         var["kUseEnvLight"] = mpScene->useEnvLight();
         var["kUseEmissiveLights"] = mpScene->useEmissiveLights();
         var["kUseAnalyticLights"] = mpScene->useAnalyticLights();
@@ -2094,7 +2112,7 @@ void ReSTIRPTPass::PathReusePass(
     if (!isPathReuseMISWeightComputation)
     {
         var["directLighting"] = renderData.getTexture(kInputDirectLighting);
-        var["useDirectLighting"] = mUseDirectLighting;
+        var["useDirectLighting"] = mStaticParams.useRTXDI;
     }
     var["gIsLastRound"] = mStaticParams.pathSamplingMode == PathSamplingMode::PathReuse || isLastRound;
 

@@ -8,7 +8,7 @@ def render_graph_SSReSTIPR():
     # Create passes
     ScreenSpaceReSTIRPass = createPass("ScreenSpaceReSTIRPass")
     g.addPass(ScreenSpaceReSTIRPass, "ScreenSpaceReSTIRPass")
-    VBufferRT = createPass("VBufferRT")
+    VBufferRT = createPass("VBufferRT", {'samplePattern': 'Center', 'sampleCount': 1, 'useAlphaTest': True})
     g.addPass(VBufferRT, "VBufferRT")
     AccumulatePass = createPass("AccumulatePass", {'enabled': False, 'precisionMode': 'Double'})
     g.addPass(AccumulatePass, "AccumulatePass")
