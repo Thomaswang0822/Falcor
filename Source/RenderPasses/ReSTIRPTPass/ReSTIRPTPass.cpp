@@ -57,7 +57,7 @@ namespace
     {
         { kInputVBuffer,        "gVBuffer",         "Visibility buffer in packed format", false, ResourceFormat::Unknown },
         { kInputMotionVectors,  "gMotionVectors",   "Motion vector buffer (float format)", true /* optional */, ResourceFormat::RG32Float },
-        { kInputDirectLighting,    "gDirectLighting",     "Sample count buffer (integer format)", true /* optional */, ResourceFormat::RGBA32Float },
+        { kInputDirectLighting,    "gDirectLighting",     "DI buffer (RGBA32Float)", true /* optional */, ResourceFormat::RGBA32Float },
     };
 
     const std::string kOutputColor = "color";
@@ -184,8 +184,6 @@ namespace
     const std::string kUseMIS = "useMIS";
     const std::string kUseRussianRoulette = "useRussianRoulette";
     // const std::string kScreenSpaceReSTIROptions = "screenSpaceReSTIROptions";
-    const std::string kUseRTXDI = "useRTXDI";
-    const std::string kRTXDIOptions = "RTXDIOptions";
 
     const std::string kUseAlphaTest = "useAlphaTest";
     const std::string kMaxNestedMaterials = "maxNestedMaterials";
@@ -324,8 +322,6 @@ void ReSTIRPTPass::setProperties(const Properties& props)
     validateOptions();
     if (auto lightBVHSampler = dynamic_cast<LightBVHSampler*>(mpEmissiveSampler.get()))
         lightBVHSampler->setOptions(mLightBVHOptions);
-    if (mpRTXDI)
-        mpRTXDI->setOptions(mRTXDIOptions);
     mRecompile = true;
     mOptionsChanged = true;
 
@@ -362,8 +358,6 @@ void ReSTIRPTPass::parseProperties(const Properties& props)
         else if (key == kSpecularRoughnessThreshold) mParams.specularRoughnessThreshold = value;
         else if (key == kDisableDirectIllumination) mStaticParams.disableDirectIllumination = value;
         else if (key == kPrimaryLodMode)  mStaticParams.primaryLodMode = value;
-        else if (key == kUseRTXDI) mStaticParams.useRTXDI = value;
-        else if (key == kRTXDIOptions) mRTXDIOptions = value;
         // Denoising parameters
         else if (key == kUseNRDDemodulation) mStaticParams.useNRDDemodulation = value;
         else if (key == kColorFormat) mStaticParams.colorFormat = value;
@@ -531,8 +525,6 @@ Properties ReSTIRPTPass::getProperties() const
     if (mStaticParams.emissiveSampler == EmissiveLightSamplerType::LightBVH)
         props[kLightBVHOptions] = mLightBVHOptions;
     props[kUseRussianRoulette] = mStaticParams.useRussianRoulette;
-    props[kUseRTXDI] = mStaticParams.useRTXDI;
-    props[kRTXDIOptions] = mRTXDIOptions;
 
     // Material parameters
     props[kUseAlphaTest] = mStaticParams.useAlphaTest;
@@ -635,10 +627,6 @@ void ReSTIRPTPass::setScene(RenderContext* pRenderContext, const ref<Scene>& pSc
     // TODO: these 2 lines are new; does 2022 code put them somewhere else?
     mParams.frameDim = {};
     mParams.screenTiles = {};
-
-    // Need to recreate the RTXDI module when the scene changes.
-    // should be useless in ReSTIR PT
-    mpRTXDI = nullptr;
 
     resetPrograms();
     resetLighting();
@@ -1657,25 +1645,6 @@ void ReSTIRPTPass::setNRDData(const ShaderVar& var, const RenderData& renderData
     var["primaryHitSpecularReflectance"] = renderData.getTexture(kOutputNRDSpecularReflectance);
 }
 
-void ReSTIRPTPass::prepareRTXDI(RenderContext* pRenderContext)
-{
-    if (mStaticParams.useRTXDI)
-    {
-        if (!mpRTXDI)
-            mpRTXDI = std::make_unique<RTXDI>(mpScene, mRTXDIOptions);
-
-        // Emit warning if enabled while using spp != 1.
-        if (!mFixedSampleCount || mStaticParams.samplesPerPixel != 1)
-        {
-            logWarning("Using RTXDI with samples/pixel != 1 will only generate one RTXDI sample reused for all pixel samples.");
-        }
-    }
-    else
-    {
-        mpRTXDI = nullptr;
-    }
-}
-
 void ReSTIRPTPass::bindShaderData(const ShaderVar& var, const RenderData& renderData, bool isPathTracer, bool isPathGenerator) const
 {
     // Bind static resources that don't change per frame.
@@ -1712,7 +1681,7 @@ void ReSTIRPTPass::bindShaderData(const ShaderVar& var, const RenderData& render
     if (isPathTracer)
     {
         var["isLastRound"] = !mEnableSpatialReuse && !mEnableTemporalReuse;
-        var["useDirectLighting"] = mStaticParams.useRTXDI;;
+        var["useDirectLighting"] = mUseDirectLighting;
         var["kUseEnvLight"] = mpScene->useEnvLight();
         var["kUseEmissiveLights"] = mpScene->useEmissiveLights();
         var["kUseAnalyticLights"] = mpScene->useAnalyticLights();
@@ -1813,11 +1782,6 @@ bool ReSTIRPTPass::beginFrame(RenderContext* pRenderContext, const RenderData& r
 
     // Update the env map and emissive sampler to the current frame.
     bool lightingChanged = prepareLighting(pRenderContext);
-
-    //// Prepare RTXDI.
-    //prepareRTXDI(pRenderContext);
-    //if (mpRTXDI)
-    //    mpRTXDI->beginFrame(pRenderContext, mParams.frameDim);
 
     // Update refresh flag if changes that affect the output have occured.
     auto& dict = renderData.getDictionary();
@@ -1931,9 +1895,6 @@ void ReSTIRPTPass::endFrame(RenderContext* pRenderContext, const RenderData& ren
     copyTexture(renderData.getTexture(kOutputRayCount).get(), mpPixelStats->getRayCountTexture(pRenderContext).get());
     copyTexture(renderData.getTexture(kOutputPathLength).get(), mpPixelStats->getPathLengthTexture().get());
 
-    //if (mpRTXDI)
-    //    mpRTXDI->endFrame(pRenderContext);
-
     mVarsChanged = false;
     mParams.frameCount++;
 }
@@ -1968,9 +1929,6 @@ void ReSTIRPTPass::generatePaths(RenderContext* pRenderContext, const RenderData
     mpScene->bindShaderData(mpGeneratePaths->getRootVar()["gScene"]);
     var["gSampleId"] = sampleId;
 
-    //if (mpRTXDI)
-    //    mpRTXDI->bindShaderData(mpGeneratePaths->getRootVar());
-
     // Launch one thread per pixel.
     // The dimensions are padded to whole tiles to allow re-indexing the threads in the shader.
     mpGeneratePaths->execute(pRenderContext, {mParams.screenTiles.x * tileSize, mParams.screenTiles.y, 1u});
@@ -1999,9 +1957,6 @@ void ReSTIRPTPass::tracePass(RenderContext* pRenderContext, const RenderData& re
 
     if (mVarsChanged)
         mpSampleGenerator->bindShaderData(var);
-    // Shouldn't use RTXDI
-    //if (mpRTXDI)
-    //    mpRTXDI->bindShaderData(var);
 
     mpPixelStats->prepareProgram(tracePass.pProgram, var);
     mpPixelDebug->prepareProgram(tracePass.pProgram, var);
@@ -2112,7 +2067,7 @@ void ReSTIRPTPass::PathReusePass(
     if (!isPathReuseMISWeightComputation)
     {
         var["directLighting"] = renderData.getTexture(kInputDirectLighting);
-        var["useDirectLighting"] = mStaticParams.useRTXDI;
+        var["useDirectLighting"] = mUseDirectLighting;
     }
     var["gIsLastRound"] = mStaticParams.pathSamplingMode == PathSamplingMode::PathReuse || isLastRound;
 
@@ -2276,8 +2231,6 @@ DefineList ReSTIRPTPass::StaticParams::getDefines(const ReSTIRPTPass& owner) con
 
     if (owner.mpEmissiveSampler)
         defines.add(owner.mpEmissiveSampler->getDefines());
-    if (owner.mpRTXDI)
-        defines.add(owner.mpRTXDI->getDefines());
 
     // We don't use the legacy shading code anymore (MaterialShading.slang).
     defines.add("_USE_LEGACY_SHADING_CODE", "0");

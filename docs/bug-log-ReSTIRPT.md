@@ -432,9 +432,9 @@ After fixing all errors (such that the runtime doesn't throw any), the rendering
 `ScreenSpaceReSTIR` is essentially pre-2022-version ReSTIR DI + ReSTIR GI. Daqi coded ReSTIR PT on top of it. Thus, it's likely that I created some bug while integrating `ScreenSpaceReSTIR` into
 Falcor 7.0.
 
-A brutal solution is simply forgo `ScreenSpaceReSTIR` and disable "comparing with ReSTIR GI" feature. Now the direct lighting input of
-ReSTIRPT pass comes from RTXDI.
+A brutal solution is simply forgo `ScreenSpaceReSTIR` because it's optional in ReSTIRPT. Now the direct lighting input of
+ReSTIRPT pass comes from RTXDI **externally**. "Externally" means that, unlike PathTracer pass where RTXDI pass is integrated to the host code, here we simply connect the render graph edge in the python scene spec script.
 
-Now, after all the ReSTIRPT operations, the final output is exactly the same as that of RTXDI. Next step is to (finally) shader-debug ReSTIRPT.
+Now, after all the ReSTIRPT operations, the final output is exactly the same as that of RTXDI. Next step is to (finally) shader-debug ReSTIRPT. A good news is that all (most, to be precise) ReSTIRPT operations are running in the background, without any runtime error, because fps dropped from ~200 in RTXDI-only setting to ~50 in ReSTIRPT setting.
 
 NOTE for myself: The path flag used in PathReservoir by ReSTIRPT is incompatible with Falcor 7.0. Fix this first.

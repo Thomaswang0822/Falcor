@@ -42,7 +42,6 @@
 #include "Rendering/Volumes/GridVolumeSampler.h"
 #include "Rendering/Materials/TexLODTypes.slang"
 #include "Rendering/Utils/PixelStats.h"
-#include "Rendering/RTXDI/RTXDI.h"
 
 #include "Params.slang"
 
@@ -108,7 +107,6 @@ private:
     void prepareMaterials(RenderContext* pRenderContext);
     bool prepareLighting(RenderContext* pRenderContext);
 
-    void prepareRTXDI(RenderContext* pRenderContext);  // not there in 2022
     void bindShaderData(const ShaderVar& var, const RenderData& renderData, bool isPathTracer, bool isPathGenerator) const;
     bool renderRenderingUI(Gui::Widgets& widget);
     bool renderDebugUI(Gui::Widgets& widget);
@@ -158,7 +156,6 @@ private:
         MISHeuristic misHeuristic = MISHeuristic::Balance; ///< MIS heuristic.
         float misPowerExponent = 2.f; ///< MIS exponent for the power heuristic. This is only used when 'PowerExp' is chosen.
         EmissiveLightSamplerType emissiveSampler = EmissiveLightSamplerType::Power; ///< Emissive light sampler to use for NEE.
-        bool useRTXDI = true;                                                      ///< Use RTXDI for direct illumination.
 
         bool useDeterministicBSDF = true; ///< Evaluate all compatible lobes at BSDF sampling time.
 
@@ -194,6 +191,7 @@ private:
         mNumSpatialRounds = 1;
         mEnableTemporalReprojection = false;
         mUseMaxHistory = true;
+        mUseDirectLighting = true;
         mTemporalHistoryLength = 20;
         mNoResamplingForTemporalReuse = false;
     }
@@ -202,7 +200,6 @@ private:
     RestirPathTracerParams mParams;            ///< Runtime path tracer parameters.
     StaticParams mStaticParams;                ///< Static parameters. These are set as compile-time constants in the shaders.
     mutable LightBVHSampler::Options mLightBVHOptions; ///< Current options for the light BVH sampler.
-    RTXDI::Options mRTXDIOptions;              ///< Current options for the RTXDI sampler.
 
     bool mEnabled = true; ///< Switch to enable/disable the path tracer. When disabled the pass outputs are cleared.
     RenderPassHelpers::IOSize mOutputSizeSelection = RenderPassHelpers::IOSize::Default; ///< Selected output size.
@@ -215,7 +212,6 @@ private:
     ref<SampleGenerator> mpSampleGenerator;                  ///< GPU pseudo-random sample generator.
     std::unique_ptr<EnvMapSampler> mpEnvMapSampler;          ///< Environment map sampler or nullptr if not used.
     std::unique_ptr<EmissiveLightSampler> mpEmissiveSampler; ///< Emissive light sampler or nullptr if not used.
-    std::unique_ptr<RTXDI> mpRTXDI;                          ///< RTXDI sampler for direct illumination or nullptr if not used.
     std::unique_ptr<PixelStats> mpPixelStats;                ///< Utility class for collecting pixel stats.
     std::unique_ptr<PixelDebug> mpPixelDebug;                ///< Utility class for pixel debugging (print in shaders).
 
@@ -254,6 +250,8 @@ private:
     bool mUseMaxHistory = true;
 
     int mReservoirFrameCount = 0; // internal
+
+    bool mUseDirectLighting = true;
 
     int mTemporalHistoryLength = 20;
     bool mNoResamplingForTemporalReuse = false;

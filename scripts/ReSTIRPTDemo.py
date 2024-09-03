@@ -20,14 +20,12 @@ def render_graph_ReSTIRPT():
     # g.addEdge("VBufferRT.viewW", "ReSTIRPTPass.viewW")
     g.addEdge("VBufferRT.mvec", "ReSTIRPTPass.motionVectors")
 
-    # TODO: connect RTXDI output to ReSTIRPTPass.directLighting "internally",
-    # @see PathTracer, but we possibly need more than RTXDIPass.color
+    # RTXDI renders to an optional buffer `directLighting` in ReSTIRPT
     RTXDIPass = createPass("RTXDIPass")
     g.addPass(RTXDIPass, "RTXDIPass")
     g.addEdge("VBufferRT.vbuffer", "RTXDIPass.vbuffer")
     g.addEdge("VBufferRT.mvec", "RTXDIPass.mvec")
     g.addEdge("RTXDIPass.color", "ReSTIRPTPass.directLighting")
-    # END TODO
 
     g.addEdge("ReSTIRPTPass.color", "AccumulatePass.input")
     g.addEdge("AccumulatePass.output", "ToneMapper.src")
