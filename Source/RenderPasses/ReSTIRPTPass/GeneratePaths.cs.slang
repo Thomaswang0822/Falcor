@@ -132,10 +132,13 @@ struct PathGenerator
         if (all(pixel < params.frameDim))
         {
             // Append paths to queues.
+            /// BUT HOW? pathID is local and nothing will be changed.
             uint pathID = (pixel.y << 12) | pixel.x; // TODO: Helper struct for encoding/decoding path ID.
 
             if (useGeneralQueue)
             {
+                /// DEBUG
+                // writeDebug(pixel, cameraRay.dir);
             }
             else if (gSampleId == 0)
             {
@@ -162,6 +165,20 @@ struct PathGenerator
         {
             outputColor[pixel] = float4(color, 1.f);
         }
+    }
+
+    void writeDebug(const uint2 pixel, const float3 dir)
+    {
+        /// CONFIRMED vbuffer[pixel] has valid HitInfo
+        const HitInfo hit = HitInfo(vbuffer[pixel]);
+        bool hitSurface = hit.isValid();
+        if (hitSurface) {
+            outputColor[pixel] = float4(hit.getPrimitiveIndex() / 255.f, 0.f, 0.f, 1.f);
+        } else {
+            // BLUE
+            outputColor[pixel] = float4(0.f, 0.f, 1.f, 1.f);
+        }
+
     }
 };
 

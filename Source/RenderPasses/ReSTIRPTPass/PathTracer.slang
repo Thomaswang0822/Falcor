@@ -218,7 +218,8 @@ struct PathTracer
         path.origin = cameraRay.origin;
         path.dir = cameraRay.dir;
 
-        // Create sample generator.
+        // Create sample generator;
+        // kPathSamplingMode default to PathSamplingMode::ReSTIR; kSamplesPerPixel default to 1
         static const uint itersPerShaderPass = PathSamplingMode(kPathSamplingMode) == PathSamplingMode::PathTracing ? kSamplesPerPixel : kCandidateSamples;
 
         uint maxSpp = itersPerShaderPass > 0 ? itersPerShaderPass : kMaxSamplesPerPixel;
@@ -1066,6 +1067,7 @@ struct PathTracer
         ShadingData sd;
         let lod = ExplicitLodTextureSampler(path.length > 0 ? params.lodBias : 0.f);
 
+        // kPrimaryLodMode defualt to TexLODMode::Mip0
         if (kPrimaryLodMode == TexLODMode::RayDiffs && path.length == 0 && path.hit.getType() == HitType::Triangle)
         {
             // Filtered lookups at primary hit
@@ -1987,6 +1989,24 @@ struct PathTracer
     void finalize(inout PathState path)
     {
         path.pathBuilder.finalize(path.pathReservoir);
+    }
+
+    /** DEBUG: Write arbitrary color to output buffer.
+     */
+    /// LOG:
+    /// generatePath() looks fine on the `path` generated.
+    void writeDebugOutput(PathState path, inout PathReservoir giReservoir, int sampleId)
+    {
+
+        const uint2 pixel = path.getPixel();
+
+        // outputColor[pixel] = float4(path.dir, 1.f);
+        if (path.isHit()) {
+            outputColor[pixel] = float4(path.hit.getPrimitiveIndex() / 255.f, 0.f, 0.f, 1.f);
+        }
+        else {
+            outputColor[pixel] = float4(0.f, 0.f, path.hit.getPrimitiveIndex() / 255.f, 1.f);
+        }
     }
 
     /** Write path contribution to output buffer.

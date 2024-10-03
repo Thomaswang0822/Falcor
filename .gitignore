@@ -22,6 +22,7 @@
 /git_version
 /git_version_state
 /CMakeCache.txt
+docs/Nsight-files
 
 # File types.
 *.user

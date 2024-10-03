@@ -48,6 +48,10 @@ void scatterMiss(inout PathState path)
     gPathTracer.handleMiss(path);
 }
 
+//
+// Shader entry point for ray generation shader.
+//
+
 // [numthreads(16, 16, 1)]
 // void main(uint3 dispatchThreadId : SV_DispatchThreadID)
 [shader("raygeneration")]

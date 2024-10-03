@@ -702,7 +702,7 @@ void ReSTIRPTPass::execute(RenderContext* pRenderContext, const RenderData& rend
                 mpReSTIRPTBlock->getRootVar()["gNumSpatialRounds"] = mNumSpatialRounds;
 
                 if (restir_i == 0)
-                    // Generate paths at primary hits.
+                    // Generate paths at primary hits (seems like unnecessary in ReSTIR)
                     generatePaths(pRenderContext, renderData, 0);
 
                 // Launch main trace pass.
@@ -711,6 +711,8 @@ void ReSTIRPTPass::execute(RenderContext* pRenderContext, const RenderData& rend
             }
         }
 
+        /// mStaticParams.pathSamplingMode default to PathSamplingMode::ReSTIR
+        /// And, if both temporal and spatial reuses are off, nothing happens in this if.
         if (mStaticParams.pathSamplingMode != PathSamplingMode::PathTracing)
         {
             // Launch restir merge pass.

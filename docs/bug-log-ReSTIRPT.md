@@ -437,4 +437,34 @@ ReSTIRPT pass comes from RTXDI **externally**. "Externally" means that, unlike P
 
 Now, after all the ReSTIRPT operations, the final output is exactly the same as that of RTXDI. Next step is to (finally) shader-debug ReSTIRPT. A good news is that all (most, to be precise) ReSTIRPT operations are running in the background, without any runtime error, because fps dropped from ~200 in RTXDI-only setting to ~50 in ReSTIRPT setting.
 
-NOTE for myself: The path flag used in PathReservoir by ReSTIRPT is incompatible with Falcor 7.0. Fix this first.
+~~NOTE for myself: The path flag used in PathReservoir by ReSTIRPT is incompatible with Falcor 7.0. Fix this first.~~ Seems like the path flag is independent now. The entire ReSTIRPTPass should be standalone except for the optional direct lighting radiance received from RTXDIPass.
+
+## Shader Debug 1: path terminated at length=0
+
+First, the call stack to this issue is
+
+```sh
+ReSTIRPTPass.cpp:
+execute() -> tracePass() ->
+
+TracePass.cs.slang:
+rayGen() -> tracePath() ->
+
+PathTracer.slang:
+handleHit() -> generateScatterRay() ->
+
+IMaterialInstance.slang ->
+sample()
+```
+
+If `generateScatterRay()` fails to generate a valid BSDF sample, `handleHit()` will terminate the path and everything is stopped.
+Currently, EVERY path is terminated.
+
+The interesting thing is, `sample()` returns false for 2 teapots and all other objects in the scene (GREEN in the debug image).
+The glass teapot is the only mesh with true returned by `sample()`.
+
+<img src="images/VeachAjarRef.png" alt="ref" width="400"/>
+
+<img src="images/wrongsSample.png" alt="ref" width="400"/>
+
+This suggests something fundamentally wrong.
