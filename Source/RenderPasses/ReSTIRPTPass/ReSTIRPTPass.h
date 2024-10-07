@@ -181,8 +181,8 @@ private:
     {
         mStaticParams = StaticParams();
         mParams = RestirPathTracerParams();
-        mEnableTemporalReuse = true;
-        mEnableSpatialReuse = true;
+        mEnableTemporalReuse = false;
+        mEnableSpatialReuse = false;
         mSpatialReusePattern = SpatialReusePattern::Default;
         mPathReusePattern = PathReusePattern::NRooksShift;
         mSmallWindowRestirWindowRadius = 2;
@@ -191,7 +191,7 @@ private:
         mNumSpatialRounds = 1;
         mEnableTemporalReprojection = false;
         mUseMaxHistory = true;
-        mUseDirectLighting = true;
+        mUseDirectLighting = false;
         mTemporalHistoryLength = 20;
         mNoResamplingForTemporalReuse = false;
     }
@@ -235,8 +235,8 @@ private:
     uint64_t mAccumulatedShadowRayCount = 0;
 
     // ReSTIR params below
-    bool mEnableTemporalReuse = true;
-    bool mEnableSpatialReuse = true;
+    bool mEnableTemporalReuse = false;
+    bool mEnableSpatialReuse = false;
     SpatialReusePattern mSpatialReusePattern = SpatialReusePattern::Default;
     PathReusePattern mPathReusePattern = PathReusePattern::NRooksShift;
     uint32_t mSmallWindowRestirWindowRadius = 2;
@@ -251,7 +251,7 @@ private:
 
     int mReservoirFrameCount = 0; // internal
 
-    bool mUseDirectLighting = true;
+    bool mUseDirectLighting = false;
 
     int mTemporalHistoryLength = 20;
     bool mNoResamplingForTemporalReuse = false;

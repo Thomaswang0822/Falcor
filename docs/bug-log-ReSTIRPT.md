@@ -467,4 +467,19 @@ The glass teapot is the only mesh with true returned by `sample()`.
 
 <img src="images/wrongsSample.png" alt="ref" width="400"/>
 
-This suggests something fundamentally wrong.
+~~This suggests something fundamentally wrong.~~ In fact, not horribly wrong. The "first part" of this bug is the following:
+
+```cs
+/// originally it was (wrongly -path.dir), and all path fail
+/// except for those hiting the glass teapot.
+/// After fixing it, only glass paths fail.
+sd = loadShadingData(path.hit, path.origin, path.dir, lod);
+```
+
+The "second part" is much harder to identify. Long story short, for path hitting the glass teapot, it's an delta event.
+In Falcor 7.0, these paths will have BSDF-sampling pdf = 0, but ReSTIRPT code will invalidate the path on pdf=0.
+Commenting out this if statement leads to, finally, correct result WITHOUT spatial or temporal reuse.
+
+<img src="images/correct-wo-SpTmp.png" alt="ref" width="400"/>
+
+## Shader Debug 2: all black after adding spatial OR temporal reuse

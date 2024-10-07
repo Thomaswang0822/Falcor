@@ -90,7 +90,7 @@ struct PathReusePass
             HitInfo PrimaryHit = HitInfo(PrimaryHitPacked); // Initialize hit info from a packed hit info.
 
             let lod = ExplicitLodTextureSampler(0.f);
-            sd = loadShadingData(PrimaryHit, ray.origin, -ray.dir, lod);
+            sd = loadShadingData(PrimaryHit, ray.origin, ray.dir, lod);
         }
         return sd;
     }

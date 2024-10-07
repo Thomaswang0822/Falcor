@@ -301,15 +301,12 @@ struct PathTracer
         \param[in,out] path The path state.
         \return True if a ray was generated, false otherwise.
     */
-    bool generateScatterRay(const ShadingData sd, inout PathState path)
+    bool generateScatterRay(const ShadingData sd, const IMaterialInstance mi, inout PathState path)
     {
         bool isCurveHit = path.hit.getType() == HitType::Curve;
 
         // Generate a BSDF sample, with updated API calls
         bool valid;
-        let hints = getMaterialInstanceHints(path.hit, path.length == 0 /* isPrimary */);
-        let lod = ExplicitLodTextureSampler(0.f);
-        let mi = gScene.materials.getMaterialInstance(sd, lod, hints);
         BSDFSample result;
         BSDFProperties bsdfProp = mi.getProperties(sd);
 
@@ -366,10 +363,13 @@ struct PathTracer
 
             path.prevScatterPdf = result.pdf;
 
-            if (result.pdf <= 0.f) // invalid
-            {
-                return false;
-            }
+            /// THE Bug reason:
+            /// For deltaEvent (glass teapot), the BSDFSample.pdf = 0.f,
+            /// but pathtracing should render correctly (confirmed with PathTracer Pass).
+            //if (result.pdf <= 0.f) // invalid
+            //{
+            //    return false;
+            //}
 
 #if _USE_LEGACY_SHADING_CODE
             // Legacy BRDF code sometimes returns infinite PDF values.
@@ -929,17 +929,6 @@ struct PathTracer
     */
     bool handleNestedDielectrics(inout ShadingData sd, inout PathState path)
     {
-        let hints = getMaterialInstanceHints(path.hit, path.length == 0 /* isPrimary */);
-        let lod = ExplicitLodTextureSampler(0.f);
-        let mi = gScene.materials.getMaterialInstance(sd, lod, hints);
-        BSDFProperties bsdfProp = mi.getProperties(sd);
-
-        // Compute relative index of refraction at interface.
-
-        // sd.eta = computeRelativeIoR(path.interiorList, sd.materialID, sd.frontFacing);
-        /// In 7.0 code, the field is IoR instead of eta (relative IoR)
-        sd.IoR = computeOutsideIoR(path.interiorList, sd.materialID, sd.frontFacing);
-
         // Check for false intersections.
         // uint nestedPriority = gScene.materials[sd.materialID].getNestedPriority();
         uint nestedPriority = sd.mtl.getNestedPriority();
@@ -959,32 +948,10 @@ struct PathTracer
             return false;
         }
 
-        // Limit specular transmission paths.
-
-        // if (kLimitTransmission && sd.specularTransmission > 0.f)
-        /// specularTransmission is no longer a field of ShadingData;
-        /// Now it is in StandardMaterial.data (of type BasicMaterialData), which is retrived from
-        /// const BasicMaterialData md = gScene.materials.getBasicMaterialData(sd.materialID); @see NRDHelpers.slang
-        /// But getBasicMaterialData() should be deprecated in the future, so we use this instead
-        if (kLimitTransmission && any(bsdfProp.specularTransmissionAlbedo > 0.f))
-        {
-            const uint transmissionBounces = path.getBounces(BounceType::Transmission);
-            if (transmissionBounces >= kMaxTransmissionReflectionDepth) {
-                sd.mtl.setActiveLobes(
-                    (uint)LobeType::All & ~((uint)LobeType::DeltaReflection | (uint)LobeType::SpecularReflection)
-                );
-            }
-            if (transmissionBounces >= kMaxTransmissionRefractionDepth)
-            {
-                // sd.eta = 1.f;
-
-                /// According to computeEta() @see WhittedRayTracer.rt.slang.
-                /// eta = sd.frontFacing ? (sd.IoR / insideIoR) : (insideIoR / sd.IoR);
-                /// where insideIoR =  = gScene.materials.evalIoR(sd.materialID);
-                /// Thus,
-                sd.IoR = gScene.materials.evalIoR(sd.materialID);
-            }
-        }
+        // Compute index of refraction for medium on the outside.
+        // sd.eta = computeRelativeIoR(path.interiorList, sd.materialID, sd.frontFacing);
+        /// In 7.0 code, the field is IoR instead of eta (relative IoR)
+        sd.IoR = computeOutsideIoR(path.interiorList, sd.materialID, sd.frontFacing);
 
         return true;
     }
@@ -1022,7 +989,7 @@ struct PathTracer
 
         if (all(dir == 0.f))
         {
-            valid = generateScatterRay(sd, path);
+            valid = generateScatterRay(sd, mi, path);
         }
         else // generate with given direction
         {
@@ -1077,8 +1044,10 @@ struct PathTracer
         }
         else
         {
-            // float lod = path.length > 0 ? params.lodBias : 0.f;
-            sd = loadShadingData(path.hit, path.origin, -path.dir, lod);
+            /// originally it was (wrongly -path.dir), and all path fail
+            /// except for those hiting the glass teapot.
+            /// After fixing it, only glass paths fail.
+            sd = loadShadingData(path.hit, path.origin, path.dir, lod);
         }
 
         // Reject false hits in nested dielectrics.
@@ -1092,7 +1061,6 @@ struct PathTracer
         /// 7.0 code: create helper resources for materials
         let hints = getMaterialInstanceHints(path.hit, path.length == 0 /* isPrimary */);
         let mi = gScene.materials.getMaterialInstance(sd, lod, hints);
-        BSDFSample result;
         BSDFProperties bsdfProp = mi.getProperties(sd);
 
         // Optionally disable emissive lights inside volumes.
@@ -1528,7 +1496,8 @@ struct PathTracer
         }
 
         // Generate the next path segment or terminate.
-        bool valid = generateScatterRay(sd, path);
+        bool valid = generateScatterRay(sd, mi, path);
+        /// THE Bug: valid is false
 
         // forbid current vertex being rcVertex
         if (kSeparatePathBSDF && params.localStrategyType & (uint)LocalStrategy::RoughnessCondition)
