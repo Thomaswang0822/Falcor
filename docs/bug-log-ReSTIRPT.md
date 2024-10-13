@@ -483,3 +483,18 @@ Commenting out this if statement leads to, finally, correct result WITHOUT spati
 <img src="images/correct-wo-SpTmp.png" alt="ref" width="400"/>
 
 ## Shader Debug 2: all black after adding spatial OR temporal reuse
+
+This turns out to be the most stupid bug. I forgot copying a line that binds the output reservoir to shader data.
+
+## Shader Debug 3: Reconnection Shift
+
+Good news is, with shifting strategy = random replay, I finally got the correct rendering.
+Something is still wrong with the reconnection shift and thus hybrid (random replay + reconnection shift).
+
+Here is what reconnection shift should look like: the glass teapot is the only trouble.
+
+<img src="images/rcShift-correct.png" alt="ref" width="400"/>
+
+Here is what it looks like now:
+
+<img src="images/rcShift-wrong.png" alt="ref" width="400"/>

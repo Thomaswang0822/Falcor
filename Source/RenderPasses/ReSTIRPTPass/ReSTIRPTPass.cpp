@@ -755,7 +755,7 @@ void ReSTIRPTPass::execute(RenderContext* pRenderContext, const RenderData& rend
             }
         }  // end of if not PT
 
-
+        mParams.seed++;
     }  // end of for restir_i
 
     // moved to endFrame()
@@ -2012,6 +2012,8 @@ void ReSTIRPTPass::PathReusePass(
 
     // TODO 2022: refactor arguments
     bindShaderData(var, renderData, false, false);
+
+    var["outputReservoirs"] = spatialRoundId % 2 == 1 ? mpTemporalReservoirs[restir_i] : mpOutputReservoirs;
 
     // NOTE: mNRooksPatternBuffer isn't filled
     if (mStaticParams.pathSamplingMode == PathSamplingMode::PathReuse)

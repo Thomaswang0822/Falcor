@@ -162,7 +162,7 @@ private:
         ReSTIRMISKind spatialMisKind = ReSTIRMISKind::Pairwise;
         ReSTIRMISKind temporalMisKind = ReSTIRMISKind::Talbot;
 
-        ShiftMapping shiftStrategy = ShiftMapping::Hybrid;
+        ShiftMapping shiftStrategy = ShiftMapping::Reconnection;
         bool temporalUpdateForDynamicScene = false;
 
         PathSamplingMode pathSamplingMode = PathSamplingMode::ReSTIR;
@@ -181,8 +181,8 @@ private:
     {
         mStaticParams = StaticParams();
         mParams = RestirPathTracerParams();
-        mEnableTemporalReuse = false;
-        mEnableSpatialReuse = false;
+        mEnableTemporalReuse = true;
+        mEnableSpatialReuse = true;
         mSpatialReusePattern = SpatialReusePattern::Default;
         mPathReusePattern = PathReusePattern::NRooksShift;
         mSmallWindowRestirWindowRadius = 2;
@@ -191,7 +191,7 @@ private:
         mNumSpatialRounds = 1;
         mEnableTemporalReprojection = false;
         mUseMaxHistory = true;
-        mUseDirectLighting = false;
+        mUseDirectLighting = true;
         mTemporalHistoryLength = 20;
         mNoResamplingForTemporalReuse = false;
     }
@@ -235,8 +235,8 @@ private:
     uint64_t mAccumulatedShadowRayCount = 0;
 
     // ReSTIR params below
-    bool mEnableTemporalReuse = false;
-    bool mEnableSpatialReuse = false;
+    bool mEnableTemporalReuse = true;
+    bool mEnableSpatialReuse = true;
     SpatialReusePattern mSpatialReusePattern = SpatialReusePattern::Default;
     PathReusePattern mPathReusePattern = PathReusePattern::NRooksShift;
     uint32_t mSmallWindowRestirWindowRadius = 2;
@@ -251,7 +251,7 @@ private:
 
     int mReservoirFrameCount = 0; // internal
 
-    bool mUseDirectLighting = false;
+    bool mUseDirectLighting = true;
 
     int mTemporalHistoryLength = 20;
     bool mNoResamplingForTemporalReuse = false;
