@@ -309,6 +309,7 @@ struct PathTracer
         bool valid;
         BSDFSample result;
         BSDFProperties bsdfProp = mi.getProperties(sd);
+        float linearRoughness = bsdfProp.roughness * bsdfProp.roughness;
 
         /*
         if (kUseBSDFSampling) {
@@ -384,7 +385,7 @@ struct PathTracer
             if (result.isLobe(LobeType::Reflection))
             {
                 // We classify specular events as diffuse if the roughness is above some threshold.
-                bool isDiffuse = result.isLobe(LobeType::DiffuseReflection) || bsdfProp.roughness > params.specularRoughnessThreshold;
+                bool isDiffuse = result.isLobe(LobeType::DiffuseReflection) || linearRoughness > params.specularRoughnessThreshold;
                 if (isDiffuse)
                 {
                     path.incrementBounces(BounceType::Diffuse);
@@ -986,6 +987,7 @@ struct PathTracer
         let mi = gScene.materials.getMaterialInstance(sd, lod, hints);
         BSDFSample result;
         BSDFProperties bsdfProp = mi.getProperties(sd);
+        float linearRoughness = bsdfProp.roughness * bsdfProp.roughness;
 
         if (all(dir == 0.f))
         {
@@ -1003,12 +1005,13 @@ struct PathTracer
         else
         {
             path.isLastVertexClassifiedAsRough =
-                // kSeparatePathBSDF ?
-                //(!path.isSpecularBounce() || bsdfProp.roughness > params.specularRoughnessThreshold) :
+                kSeparatePathBSDF ?
+                (!path.isSpecularBounce() || linearRoughness > params.specularRoughnessThreshold) :
                 // classifyAsRough(sd, params.specularRoughnessThreshold);
-                bsdfProp.roughness > params.specularRoughnessThreshold;
+                linearRoughness > params.specularRoughnessThreshold;
 
-            /// hasRoughComponent() and classifyAsRough() do the same thing in 7.0 code: bool(roughness > threshold)
+            /// classifyAsRough(const ShadingData sd, float roughnessThreshold)
+            /// is simply sd.linearRoughness > roughnessThreshold;
         }
     }
 
@@ -1061,7 +1064,9 @@ struct PathTracer
         /// 7.0 code: create helper resources for materials
         let hints = getMaterialInstanceHints(path.hit, path.length == 0 /* isPrimary */);
         let mi = gScene.materials.getMaterialInstance(sd, lod, hints);
+        const uint activeLobes = sd.mtl.getActiveLobes();
         BSDFProperties bsdfProp = mi.getProperties(sd);
+        float linearRoughness = bsdfProp.roughness * bsdfProp.roughness;
 
         // Optionally disable emissive lights inside volumes.
         if (!kUseLightsInDielectricVolumes && path.isInsideDielectricVolume()) {
@@ -1072,7 +1077,7 @@ struct PathTracer
 
 
         // Disable specular lobes if caustics are disabled and path already contains a diffuse vertex.
-        if (kDisableCaustics && path.getBounces(BounceType::Diffuse) > 0 && bsdfProp.roughness <= params.specularRoughnessThreshold)
+        if (kDisableCaustics && path.getBounces(BounceType::Diffuse) > 0 && linearRoughness <= params.specularRoughnessThreshold)
         {
             // sd.setActiveLobes((uint)LobeType::Diffuse);
             sd.mtl.setActiveLobes((uint)LobeType::Diffuse);
@@ -1241,10 +1246,13 @@ struct PathTracer
         bool is_rcVertex = false;
 
         bool isFarField = length(path.origin - prevPathOrigin) >= params.nearFieldDistance;
+        //const uint activeLobes = sd.mtl.getActiveLobes();
         bool isCurrentVertexClassifiedAsRough =
-            // kSeparatePathBSDF ? hasRoughComponent(sd, params.specularRoughnessThreshold) : classifyAsRough(sd, params.specularRoughnessThreshold);
-            bsdfProp.roughness > params.specularRoughnessThreshold;
-        /// hasRoughComponent() and classifyAsRough() do the same thing in 7.0 code: bool(roughness > threshold)
+            kSeparatePathBSDF ?
+                hasRoughComponent(activeLobes, linearRoughness, params.specularRoughnessThreshold) :
+                linearRoughness > params.specularRoughnessThreshold;
+        /// classifyAsRough(const ShadingData sd, float roughnessThreshold)
+        /// is simply sd.linearRoughness > roughnessThreshold;
 
         bool isLastVertexAcceptableForRcPrev = path.isLastVertexClassifiedAsRough;
 
@@ -1316,15 +1324,15 @@ struct PathTracer
             {
                 // not possible to generate a diffuse bounce if
                 if (params.localStrategyType & (uint)LocalStrategy::RoughnessCondition && // we do check roughness
-                    ( // && if not rough enough
+                    ( // && but not rough enough, whether we separate BSDF or not
                         (kSeparatePathBSDF &&
                             (
                                 path.pathBuilder.pathFlags.decodeIsSpecularBounce(true)
-                                ? bsdfProp.roughness <= params.specularRoughnessThreshold
-                                // : !hasRoughComponent(sd, 1.f)
-                                : !(bsdfProp.roughness > 1.f)
+                                ? linearRoughness <= params.specularRoughnessThreshold
+                                : !hasRoughComponent(activeLobes, linearRoughness, 1.f)
                             )
-                        ) ||
+                        )
+                        ||
                         (!kSeparatePathBSDF && !isCurrentVertexClassifiedAsRough)
                     )
                 )
@@ -1502,7 +1510,7 @@ struct PathTracer
         // forbid current vertex being rcVertex
         if (kSeparatePathBSDF && params.localStrategyType & (uint)LocalStrategy::RoughnessCondition)
         {
-            bool seenAsConnectible = !path.isSpecularBounce() || bsdfProp.roughness > params.specularRoughnessThreshold;
+            bool seenAsConnectible = !path.isSpecularBounce() || linearRoughness > params.specularRoughnessThreshold;
 
             if (path.isReplayForHybridShift && seenAsConnectible && isLastVertexAcceptableForRcPrev && path.length >= 1)
             {
@@ -2179,3 +2187,16 @@ struct PathTracer
     }
 
 };
+
+/** The deprecated code is
+bool hasRoughComponent(const ShadingData sd, float roughnessThreshold) {
+    return pDiffuseReflection > 0 || sd.linearRoughness > roughnessThreshold;
+}
+*/
+bool hasRoughComponent(const uint activeLobes, const float roughness, float roughnessThreshold) {
+    // no need to build full StandardBSDF
+
+    // pDiffuseReflection =
+    //         (activeLobes & (uint)LobeType::DiffuseReflection) ? detach(diffuseWeight * dielectricBSDF * (1.f - diffTrans)) : 0.f;
+    return bool(activeLobes & (uint)LobeType::DiffuseReflection) || roughness > roughnessThreshold;
+}

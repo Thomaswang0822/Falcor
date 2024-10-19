@@ -10,6 +10,8 @@ import LoadShadingData;
 import Params;
 import Utils.Debug.PixelDebug;
 import Rendering.Utils.PixelStats;
+import Rendering.Materials.BSDFs.StandardBSDF;
+import Rendering.Materials.StandardMaterialInstance;
 import Scene.RaytracingInline;
 import Scene.Scene;
 import PathTracer;
@@ -165,21 +167,20 @@ float3 computeShiftedIntegrandHybrid(const RestirPathTracerParams params, bool u
 
         if (params.localStrategyType & (uint)LocalStrategy::RoughnessCondition)
         {
+            // false
             bool isSpecularBounce = srcReservoir.pathFlags.decodeIsSpecularBounce(true);
 
-            /** The deprecated code is
-            bool hasRoughComponent(const ShadingData sd, float roughnessThreshold) {
-                return pDiffuseReflection > 0 || sd.linearRoughness > roughnessThreshold;
-            }
-            bool classifyAsRough(const ShadingData sd, float roughnessThreshold) {
-                return sd.linearRoughness > roughnessThreshold;
-            }
+            /** The deprecated function
+            hasRoughComponent(const ShadingData sd, float roughnessThreshold) has been
+            restored in PathTracer.slang
             */
+            const uint dstActiveLobes = dstPrimarySd.mtl.getActiveLobes();
+            float linearRoughness = dstBsdfProperties.roughness * dstBsdfProperties.roughness;
             bool isLastVertexClassifiedAsRough = kSeparatePathBSDF ?
                 (isSpecularBounce ?
-                    dstBsdfProperties.roughness > params.specularRoughnessThreshold :
-                    // hasRoughComponent(dstPrimarySd, 1.f)
-                    dstBsdfProperties.roughness > 1.f
+                    linearRoughness > params.specularRoughnessThreshold :
+                    hasRoughComponent(dstActiveLobes, linearRoughness, 1.f)
+                    //dstBsdfProperties.roughness > 1.f
                 ) :
                 // classifyAsRough(dstPrimarySd, params.specularRoughnessThreshold);
                 dstBsdfProperties.roughness > params.specularRoughnessThreshold;
@@ -209,6 +210,7 @@ float3 computeShiftedIntegrandHybrid(const RestirPathTracerParams params, bool u
             ShadingData dstRcPrevVertexSd = dstPrimarySd;
             ShadingData srcRcPrevVertexSd = srcPrimarySd;
 
+            //Something wrong here
             if (srcReservoir.pathFlags.rcVertexLength() > 1)
             {
                 dstRcPrevVertexSd = loadShadingData(
@@ -315,6 +317,8 @@ float3 computeShiftedIntegrandReconnectionPathTree(const RestirPathTracerParams 
     let srcMI = gScene.materials.getMaterialInstance(srcPrimarySd, lod, srcHints);
     let dstMI = gScene.materials.getMaterialInstance(dstPrimarySd, lod, dstHints);
     let rcMI = gScene.materials.getMaterialInstance(rcVertexSd, lod, rcHints);
+    Optional<StandardMaterialInstance> rcSMI = rcMI as StandardMaterialInstance;
+    assert(rcSMI != none);
     // and a SampleGenerator since MaterialInstance::eval() needs it
     SampleGenerator sg = SampleGenerator(srcReservoir.initRandomSeed);
 
@@ -386,8 +390,10 @@ float3 computeShiftedIntegrandReconnectionPathTree(const RestirPathTracerParams 
 
         // assuming bsdf sampling
         // float dstRcVertexScatterPdf = evalPdfBSDF(rcVertexSd, rcVertexWi, dstRcVertexScatterPdfAll, allowedSampledTypes2, isDelta2);
-        float dstRcVertexScatterPdf = rcMI.evalPdf(rcVertexSd, rcVertexWi);
-        dstRcVertexScatterPdfAll = dstRcVertexScatterPdf; // @see debug log
+        float dstRcVertexScatterPdf = evalPdfBSDF(rcVertexSd, rcSMI.value, rcVertexWi, dstRcVertexScatterPdfAll, allowedSampledTypes2, isDelta2);
+
+        //float dstRcVertexScatterPdf = rcMI.evalPdf(rcVertexSd, rcVertexWi);
+        //dstRcVertexScatterPdfAll = dstRcVertexScatterPdf; // @see debug log
 
         /// Other than setting sd.V = V for the `in ShadingData sd`, evalPdfBSDFWithV() has no difference than evalPdfBSDF().
         /// And NOTE float3 dstConnectionV = -rcVertexSd.V; has been executed earlier.
@@ -480,9 +486,12 @@ float3 computeShiftedIntegrandReconnection(const RestirPathTracerParams params, 
     let dstHints = (uint)MaterialInstanceHints::None;
     let srcMI = gScene.materials.getMaterialInstance(srcPrimarySd, lod, srcHints);
     let dstMI = gScene.materials.getMaterialInstance(dstPrimarySd, lod, dstHints);
+    Optional<StandardMaterialInstance> dstSMI = dstMI as StandardMaterialInstance;
+    assert(dstSMI != none);
     // and a SampleGenerator since MaterialInstance::eval() needs it
     SampleGenerator sg = SampleGenerator(srcReservoir.initRandomSeed);
 
+    // generally not entering this if
     if (!rcVertexHitExists)
     {
         float3 dstIntegrand = 0.f;
@@ -496,8 +505,10 @@ float3 computeShiftedIntegrandReconnection(const RestirPathTracerParams params, 
                 float srcPDF1 = useCachedJacobian ? srcReservoir.cachedJacobian.x : srcMI.evalPdf(srcPrimarySd, wi);
                 float dstPDF1All;
                 // float dstPDF1 = evalPdfBSDF(dstPrimarySd, wi, dstPDF1All, allowedSampledTypes1);
-                float dstPDF1 = dstMI.evalPdf(dstPrimarySd, wi);
-                dstPDF1All = dstPDF1; // @see debug log
+                float dstPDF1 = evalPdfBSDF(dstPrimarySd, dstSMI.value, wi, dstPDF1All, allowedSampledTypes1);
+                //float dstPDF1 = dstMI.evalPdf(dstPrimarySd, wi);
+
+                //dstPDF1All = dstPDF1; // @see debug log
                 dstCachedJacobian.x = dstPDF1;
                 // float3 dstF1 = evalBSDFCosine(dstPrimarySd, wi, allowedSampledTypes1);
                 float3 dstF1 = dstMI.eval(dstPrimarySd, wi, sg);
@@ -531,6 +542,8 @@ float3 computeShiftedIntegrandReconnection(const RestirPathTracerParams params, 
     // MaterialInstance of reconnection vertex
     let rcHints = getMaterialInstanceHints(rcVertexHit, false /* isPrimary */);
     let rcMI = gScene.materials.getMaterialInstance(rcVertexSd, lod, rcHints);
+    Optional<StandardMaterialInstance> rcSMI = rcMI as StandardMaterialInstance;
+    assert(rcSMI != none);
 
     // need to evaluate source PDF of BSDF sampling
     float3 dstConnectionV = -rcVertexSd.V; // direction point from dst primary hit point to reconnection vertex
@@ -555,7 +568,7 @@ float3 computeShiftedIntegrandReconnection(const RestirPathTracerParams params, 
         float3 originalDisp = rcVertexSd.posW - srcPrimarySd.posW;
         float original_dist2 = dot(originalDisp, originalDisp);
         float original_cosine = abs(dot(rcVertexSd.faceN, -srcConnectionV));
-        Jacobian = dstCachedJacobian.z* original_dist2 / original_cosine;
+        Jacobian = dstCachedJacobian.z * original_dist2 / original_cosine;
     }
     if (isJacobianInvalid(Jacobian)) return 0.f;
 
@@ -566,7 +579,9 @@ float3 computeShiftedIntegrandReconnection(const RestirPathTracerParams params, 
     float dstPDF1All = 0.f;
 
     // float dstPDF1 = evalPdfBSDF(dstPrimarySd, dstConnectionV, dstPDF1All, allowedSampledTypes1);
+    //float dstPDF1 = evalPdfBSDF(dstPrimarySd, dstSMI.value, dstConnectionV, dstPDF1All, allowedSampledTypes1);
     float dstPDF1 = dstMI.evalPdf(dstPrimarySd, dstConnectionV);
+
     dstPDF1All = dstPDF1; // @see debug log
 
     dstCachedJacobian.x = dstPDF1;
@@ -593,10 +608,11 @@ float3 computeShiftedIntegrandReconnection(const RestirPathTracerParams params, 
     {
         // assuming bsdf sampling
         // dstRcVertexScatterPdf = evalPdfBSDF(rcVertexSd, rcVertexWi, dstRcVertexScatterPdfAll, allowedSampledTypes2);
-        dstRcVertexScatterPdf = rcMI.evalPdf(rcVertexSd, rcVertexWi);
-        dstRcVertexScatterPdfAll = dstRcVertexScatterPdf; // @see debug log
+        dstRcVertexScatterPdf = evalPdfBSDF(rcVertexSd, rcSMI.value, rcVertexWi, dstRcVertexScatterPdfAll, allowedSampledTypes2);
 
-        // dstRcVertexScatterPdf = rcMI.evalPdf(rcVertexSd, rcVertexWi);
+        //dstRcVertexScatterPdf = rcMI.evalPdf(rcVertexSd, rcVertexWi);
+        //dstRcVertexScatterPdfAll = dstRcVertexScatterPdf; // @see debug log
+
         dstCachedJacobian.y = dstRcVertexScatterPdf;
         srcRcVertexScatterPdf = useCachedJacobian ?
             srcReservoir.cachedJacobian.y :
@@ -764,5 +780,50 @@ bool traceVisibilityRay(const Ray ray)
 {
     SceneRayQuery<kUseAlphaTest> sceneRayQuery;
     return sceneRayQuery.traceVisibilityRay(ray, RAY_FLAG_NONE, 0xff);
+}
+
+enum class SampledBSDFFlags
+{
+    DiffuseReflection = 1,
+    DiffuseTransmission = 2,
+    SpecularReflection = 4,
+    SpecularTransmission = 8
+};
+
+float evalPdfBSDF(const ShadingData sd, const StandardMaterialInstance mi, float3 wo, out float pdfAll, uint allowedSampledTypes = -1, bool allowDeltaEval = false)
+{
+    // @see Rendering.Materials.StandardMaterialInstance, evalPdf().
+    float3 wiLocal = mi.sf.toLocal(sd.V);
+    float3 woLocal = mi.sf.toLocal(wo);
+    StandardBSDF bsdf = StandardBSDF(wiLocal, sd.mtl, mi.data);
+
+    // manually unroll bsdf.evalPdfAll(wo, wi, pdfAll, allowedSampledFlags, allowDeltaEval);
+    pdfAll = 0.f;
+    float pdfSingle = 0.f;
+    if (!allowDeltaEval && bsdf.pDiffuseReflection > 0.f)
+    {
+        float pdf = bsdf.pDiffuseReflection * bsdf.diffuseReflection.evalPdf(woLocal, wiLocal);
+        if (allowedSampledTypes & uint(SampledBSDFFlags::DiffuseReflection)) pdfSingle += pdf;
+        pdfAll += pdf;
+    }
+    if (!allowDeltaEval && bsdf.pDiffuseTransmission > 0.f)
+    {
+        float pdf = bsdf.pDiffuseTransmission * bsdf.diffuseTransmission.evalPdf(woLocal, wiLocal);
+        if (allowedSampledTypes & uint(SampledBSDFFlags::DiffuseTransmission)) pdfSingle += pdf;
+        pdfAll += pdf;
+    }
+    if (bsdf.pSpecularReflection > 0.f)
+    {
+        float pdf = bsdf.pSpecularReflection * bsdf.specularReflection.evalPdf(woLocal, wiLocal/*, allowDeltaEval*/);
+        if (allowedSampledTypes & uint(SampledBSDFFlags::SpecularReflection)) pdfSingle += pdf;
+        pdfAll += pdf;
+    }
+    if (bsdf.pSpecularTransmission > 0.f)
+    {
+        float pdf = bsdf.pSpecularTransmission * bsdf.specularTransmission.evalPdf(woLocal, wiLocal/*, allowDeltaEval*/);
+        if (allowedSampledTypes & uint(SampledBSDFFlags::SpecularTransmission)) pdfSingle += pdf;
+        pdfAll += pdf;
+    }
+    return pdfSingle;
 }
 

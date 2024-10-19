@@ -102,6 +102,13 @@ struct PathRetracePass
         const uint centralOffset = params.getReservoirOffset(pixel);
         PathReservoir centralReservoir = outputReservoirs[centralOffset];
 
+        //// DEBUG
+        //ReconnectionData dummy;
+        //dummy.Init();
+        //reconnectionDataBuffer[centralOffset].data[0] = dummy;
+        //reconnectionDataBuffer[centralOffset].data[1] = dummy;
+        //return;
+
         PackedHitInfo centralPrimaryHitPacked;
         ShadingData centralPrimarySd = getPixelShadingData(pixel, centralPrimaryHitPacked);
         if (!isValidPackedHitInfo(centralPrimaryHitPacked)) return;
