@@ -413,7 +413,7 @@ struct PathTracer
 
             // if (result.isLobe(LobeType::SpecularOrDelta))
             /// Specular = 0x22, Delta = 0x44; used to be a SpecularOrDelta = 0x66 in 2022 code
-            if (result.isLobe(LobeType::Specular) && result.isLobe(LobeType::Delta))
+            if (result.isLobe(LobeType::Specular) || result.isLobe(LobeType::Delta))
             {
                 path.setSpecularBounce();
             }
