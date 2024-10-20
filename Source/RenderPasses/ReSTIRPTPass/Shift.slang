@@ -175,11 +175,10 @@ float3 computeShiftedIntegrandHybrid(const RestirPathTracerParams params, bool u
             restored in PathTracer.slang
             */
             const uint dstActiveLobes = dstPrimarySd.mtl.getActiveLobes();
-            float linearRoughness = dstBsdfProperties.roughness * dstBsdfProperties.roughness;
             bool isLastVertexClassifiedAsRough = kSeparatePathBSDF ?
                 (isSpecularBounce ?
-                    linearRoughness > params.specularRoughnessThreshold :
-                    hasRoughComponent(dstActiveLobes, linearRoughness, 1.f)
+                    dstBsdfProperties.roughness > params.specularRoughnessThreshold :
+                    hasRoughComponent(dstActiveLobes, dstBsdfProperties.roughness, 1.f)
                     //dstBsdfProperties.roughness > 1.f
                 ) :
                 // classifyAsRough(dstPrimarySd, params.specularRoughnessThreshold);

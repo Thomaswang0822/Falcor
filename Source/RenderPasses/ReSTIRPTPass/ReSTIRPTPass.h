@@ -165,7 +165,7 @@ private:
         ShiftMapping shiftStrategy = ShiftMapping::Hybrid;
         bool temporalUpdateForDynamicScene = false;
 
-        PathSamplingMode pathSamplingMode = PathSamplingMode::PathTracing;
+        PathSamplingMode pathSamplingMode = PathSamplingMode::ReSTIR;
 
         bool separatePathBSDF = true;
 
@@ -181,7 +181,7 @@ private:
     {
         mStaticParams = StaticParams();
         mParams = RestirPathTracerParams();
-        mEnableTemporalReuse = false;
+        mEnableTemporalReuse = true;
         mEnableSpatialReuse = false;
         mSpatialReusePattern = SpatialReusePattern::Default;
         mPathReusePattern = PathReusePattern::NRooksShift;
@@ -235,7 +235,7 @@ private:
     uint64_t mAccumulatedShadowRayCount = 0;
 
     // ReSTIR params below
-    bool mEnableTemporalReuse = false;
+    bool mEnableTemporalReuse = true;
     bool mEnableSpatialReuse = false;
     SpatialReusePattern mSpatialReusePattern = SpatialReusePattern::Default;
     PathReusePattern mPathReusePattern = PathReusePattern::NRooksShift;
