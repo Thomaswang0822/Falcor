@@ -1,6 +1,6 @@
 {
     "slang.predefinedMacros": [
-        "BPR=1",
+        "BPR=0",
         "RCDATA_PATH_NUM=6",
         "USE_ENV_BACKGROUND=1",
         "RTXDI_INSTALLED=1",
@@ -27,7 +27,7 @@
         "MIS_HEURISTIC=0",
         "MIS_POWER_EXPONENT=0",
         "SHIFT_STRATEGY=0",
-        "SPATIAL_RESTIR_MIS_KIND=0",
+        "SPATIAL_RESTIR_MIS_KIND=2",
         "TEMPORAL_RESTIR_MIS_KIND=1",
         "TEMPORAL_UPDATE_FOR_DYNAMIC_SCENE=false",
         "PATH_SAMPLING_MODE=0",

@@ -35,5 +35,3 @@ docs/Nsight-files
 *.mp4
 *.tlog
 *.bak
-
-/Source/RenderPasses/ReSTIRPTPass/Data

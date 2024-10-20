@@ -181,9 +181,8 @@ struct RestirPathTracerParams
     uint2   screenTiles = { 0, 0 };     ///< Number of screen-tiles. Screen tiles may extend outside the frame.
 
     uint    frameCount = 0;             ///< Frames rendered. This is used as random seed.
-    //uint    localStrategyType = (uint)LocalStrategy::RoughnessCondition | (uint)LocalStrategy::DistanceCondition;
-    uint    localStrategyType = (uint)LocalStrategy::RoughnessCondition;
-    int     rejectShiftBasedOnJacobian = false; // can be helpful for dynamic geometry
+    uint    localStrategyType = (uint)LocalStrategy::RoughnessCondition | (uint)LocalStrategy::DistanceCondition;
+    int     rejectShiftBasedOnJacobian = true; // can be helpful for dynamic geometry
     float   jacobianRejectionThreshold = 10.f;
 
     // params for roughness condition in mixed strategy
