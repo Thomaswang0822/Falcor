@@ -463,9 +463,9 @@ Currently, EVERY path is terminated.
 The interesting thing is, `sample()` returns false for 2 teapots and all other objects in the scene (GREEN in the debug image).
 The glass teapot is the only mesh with true returned by `sample()`.
 
-<img src="images/VeachAjarRef.png" alt="ref" width="400"/>
+<img src="img-ReSTIRPT-bug/VeachAjarRef.png" alt="VeachAjarRef" width="400"/>
 
-<img src="images/wrongsSample.png" alt="ref" width="400"/>
+<img src="img-ReSTIRPT-bug/wrongsSample.png" alt="wrongsSample" width="400"/>
 
 ~~This suggests something fundamentally wrong.~~ In fact, not horribly wrong. The "first part" of this bug is the following:
 
@@ -480,21 +480,33 @@ The "second part" is much harder to identify. Long story short, for path hitting
 In Falcor 7.0, these paths will have BSDF-sampling pdf = 0, but ReSTIRPT code will invalidate the path on pdf=0.
 Commenting out this if statement leads to, finally, correct result WITHOUT spatial or temporal reuse.
 
-<img src="images/correct-wo-SpTmp.png" alt="ref" width="400"/>
+<img src="img-ReSTIRPT-bug/correct-wo-SpTmp.png" alt="correct-wo-SpTmp" width="400"/>
 
 ## Shader Debug 2: all black after adding spatial OR temporal reuse
 
 This turns out to be the most stupid bug. I forgot copying a line that binds the output reservoir to shader data.
 
-## Shader Debug 3: Reconnection Shift
+## Shader Debug 3: Reconnection Shift & Hybrid Shift
 
 Good news is, with shifting strategy = random replay, I finally got the correct rendering.
 Something is still wrong with the reconnection shift and thus hybrid (random replay + reconnection shift).
 
 Here is what reconnection shift should look like: the glass teapot is the only trouble.
 
-<img src="images/rcShift-correct.png" alt="ref" width="400"/>
+<img src="img-ReSTIRPT-bug/rcShift-correct.png" alt="rcShift-correct" width="400"/>
 
 Here is what it looks like now:
 
-<img src="images/rcShift-wrong.png" alt="ref" width="400"/>
+<img src="img-ReSTIRPT-bug/rcShift-wrong.png" alt="rcShift-wrong" width="400"/>
+
+In the end, ***my personal understanding*** turned out to be horribly wrong. It was a huge pain to locate
+this bug at the code/shader level. After thinking about the idea behind reconnection shift and hybrid shift once again,
+I realized this should be the cause. In short, with these 2 shifting strategies, we attempt to merge current-pixel reservoir
+with its temporal and spatial neighbor reservoirs based on some roughness and distance conditions.
+Thus, we must enforce that, if materials/BSDFs in the neighbor have multiple lobes, we pick the same lobe in the ReSTIR stage
+(retrace + reuse) as the one determined in the intial path tracing stage.
+
+And this is why those 2 flags, `uint allowedSampledTypes` and `bool allowDeltaEval`, together with the deprecated BSDF evaluation
+functions which take them, are necessary in ReSTIR PT.
+
+After fixing this and several tiny bugs, we see the clean Veach Ajar scene in real time!
