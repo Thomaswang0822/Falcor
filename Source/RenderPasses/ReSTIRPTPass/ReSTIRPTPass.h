@@ -205,8 +205,6 @@ private:
     RenderPassHelpers::IOSize mOutputSizeSelection = RenderPassHelpers::IOSize::Default; ///< Selected output size.
     uint2 mFixedOutputSize = {512, 512}; ///< Output size in pixels when 'Fixed' size is selected.
 
-    //bool mSERSupported = false; ///< True if the device supports SER.
-
     // Internal state
     ref<Scene> mpScene;                                      ///< The current scene, or nullptr if no scene loaded.
     ref<SampleGenerator> mpSampleGenerator;                  ///< GPU pseudo-random sample generator.
@@ -268,7 +266,6 @@ private:
     ref<ComputePass> mpTemporalPathRetracePass;
 
     ref<ComputePass> mpGeneratePaths; ///< Fullscreen compute pass generating paths starting at primary hits.
-    //ref<ComputePass> mpResolvePass;   ///< Sample resolve pass.
     ref<ComputePass> mpReflectTypes;  ///< Helper for reflecting structured buffer types.
 
     std::unique_ptr<TracePass> mpTracePass;                  ///< Main trace pass.

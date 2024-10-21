@@ -473,11 +473,12 @@ struct PathTracer
     bool generateScatterRayGivenDirection(const ShadingData sd, float3 dir, inout PathState path)
     {
         bool isCurveHit = path.hit.getType() == HitType::Curve;
+        bool isPrimary = path.length == 0;
 
         // Generate a BSDF sample, with updated API calls
         bool valid;
-        let hints = getMaterialInstanceHints(path.hit, path.length == 0 /* isPrimary */);
-        let lod = ExplicitLodTextureSampler(0.f);
+        let hints = getMaterialInstanceHints(path.hit, isPrimary);
+        let lod = params.createTextureSampler(isPrimary);
         let mi = gScene.materials.getMaterialInstance(sd, lod, hints);
         Optional<StandardMaterialInstance> smi = mi as StandardMaterialInstance;
         assert(smi != none);
@@ -997,7 +998,7 @@ struct PathTracer
         bool valid = true;
 
         let hints = getMaterialInstanceHints(path.hit, true /* isPrimary */);
-        let lod = ExplicitLodTextureSampler(0.f);
+        let lod = params.createTextureSampler(true /* isPrimary */);
         let mi = gScene.materials.getMaterialInstance(sd, lod, hints);
         BSDFSample result;
         BSDFProperties bsdfProp = mi.getProperties(sd);
@@ -1048,7 +1049,7 @@ struct PathTracer
 
         // Load vertex/material attributes. This is a long latency operation.
         ShadingData sd;
-        let lod = ExplicitLodTextureSampler(path.length > 0 ? params.lodBias : 0.f);
+        let lod = params.createTextureSampler(path.length > 0 /* isPrimary */);
 
         // kPrimaryLodMode defualt to TexLODMode::Mip0
         if (kPrimaryLodMode == TexLODMode::RayDiffs && path.length == 0 && path.hit.getType() == HitType::Triangle)
@@ -1826,6 +1827,7 @@ struct PathTracer
     {
         PathState path;
         bool isRcVertexEscapedVertex = pathFlags.pathLength() + 1 == pathFlags.rcVertexLength();
+        bool isPrimary = path.length == 0;
         generateRandomReplayPath(path, hit, ray, initRandomSeed, pathFlags.pathLength(), pathFlags.lastVertexNEE(), isRcVertexEscapedVertex);
         path.useHybridShift = true;
         path.isReplayForHybridShift = true;
@@ -1852,8 +1854,8 @@ struct PathTracer
             else pathType = NRDPathType::Residual;
 
             // must create a BSDFProperties for computeSampleReflectance()
-            let lod = ExplicitLodTextureSampler(0.f);
-            let hints = getMaterialInstanceHints(hit, path.length == 0 /* isPrimary */);
+            let lod = params.createTextureSampler(isPrimary);
+            let hints = getMaterialInstanceHints(hit, isPrimary);
             let mi = gScene.materials.getMaterialInstance(sd, lod, hints);
             BSDFProperties bsdfProp = mi.getProperties(sd);
             sampleReflectance = computeSampleReflectance(kUseNRDDemodulation, path.isDiffusePrimaryHit(), path.isSpecularPrimaryHit(), sd, bsdfProp);
@@ -1866,7 +1868,7 @@ struct PathTracer
     {
         int rcVertexLength = tempPathReservoir.pathFlags.rcVertexLength();
 
-        let lod = ExplicitLodTextureSampler(0.f);
+        let lod = params.createTextureSampler(rcVertexLength == 0 /* isPrimary */);
         ShadingData rcVertexSd = loadShadingDataWithPrevVertexPosition(tempPathReservoir.rcVertexHit.getHitInfo(), rcPrevSd.posW, lod);
         /// After loading data, load material resource
         let hints = (uint)MaterialInstanceHints::None;
@@ -1878,7 +1880,7 @@ struct PathTracer
         if (tempPathReservoir.pathFlags.lastVertexNEE() && tempPathReservoir.pathFlags.pathLength() == rcVertexLength)
         {
             path = {};
-            path.length = rcVertexLength;
+            path.length = (uint16_t)rcVertexLength;
             // call light sampling function
             LightSample ls;
             bool validSample = true;
@@ -1992,8 +1994,6 @@ struct PathTracer
 
     /** DEBUG: Write arbitrary color to output buffer.
      */
-    /// LOG:
-    /// generatePath() looks fine on the `path` generated.
     void writeDebugOutput(PathState path, inout PathReservoir giReservoir, int sampleId)
     {
 

@@ -29,8 +29,6 @@ import Scene.Scene;
 import Utils.Attributes;
 import Utils.Color.ColorHelpers;
 import Rendering.Lights.EnvMapSampler;
-// import Rendering.Materials.ClothMaterial;
-// import Rendering.Materials.HairMaterial;
 import LoadShadingData;
 import PathTracer;
 import PathState;
@@ -137,8 +135,7 @@ struct PathGenerator
 
             if (useGeneralQueue)
             {
-                /// DEBUG
-                // writeDebug(pixel, cameraRay.dir);
+
             }
             else if (gSampleId == 0)
             {

@@ -13,8 +13,6 @@ import Utils.Sampling.TinyUniformSampleGenerator;
 import Utils.Math.Ray;
 import LoadShadingData;
 
-/** TODO.
-*/
 struct PathReusePass
 {
     static const uint kNeighborOffsetCount = NEIGHBOR_OFFSET_COUNT;
@@ -50,9 +48,6 @@ struct PathReusePass
 
     bool isValidScreenRegion(int2 pixel) { return all(pixel >= 0 && pixel < params.frameDim); }
 
-    /// 2024 UPDATE:
-    /// Previously, struct HitInfo stores unpacked data in an array of uint.
-    /// Now HitInfo has a PackedHitInfo field directly.
     ShadingData getPixelShadingData(int2 pixel, out PackedHitInfo PrimaryHitPacked)
     {
         ShadingData sd = {};
@@ -60,21 +55,14 @@ struct PathReusePass
         PrimaryHitPacked = vbuffer[pixel];
         if (isValidPackedHitInfo(PrimaryHitPacked))
         {
-            // HitInfo PrimaryHit; PrimaryHit.unpack(PrimaryHitPacked);
             HitInfo PrimaryHit = HitInfo(PrimaryHitPacked); // Initialize hit info from a packed hit info.
 
-            let lod = ExplicitLodTextureSampler(0.f);
+            let lod = params.createTextureSampler(true /* isPrimary */);
             sd = loadShadingData(PrimaryHit, ray.origin, ray.dir, lod);
         }
         return sd;
     }
 
-    /// 2024 UPDATE:
-    /// Previously, struct HitInfo stores unpacked data in an array of uint.
-    /// Now HitInfo has a PackedHitInfo field directly.
-    /// Also, computeRayPinholePrevFrame() is deprecated. It differs from computeRayPinhole()
-    /// only by using prev-frame camera jitter, which is also deprecated in 7.0 code.
-    /// Thus, we ignore camera jitters in prev frame and use computeRayPinhole() on prev-frame pixel.
     ShadingData getPixelTemporalShadingData(int2 prevPixel, out PackedHitInfo PrimaryHitPacked)
     {
         ShadingData sd = {};
@@ -85,7 +73,7 @@ struct PathReusePass
             // HitInfo PrimaryHit; PrimaryHit.unpack(PrimaryHitPacked);
             HitInfo PrimaryHit = HitInfo(PrimaryHitPacked); // Initialize hit info from a packed hit info.
 
-            let lod = ExplicitLodTextureSampler(0.f);
+            let lod = params.createTextureSampler(true /* isPrimary */);
             sd = loadShadingData(PrimaryHit, ray.origin, ray.dir, lod);
         }
         return sd;

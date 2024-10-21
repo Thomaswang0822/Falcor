@@ -165,7 +165,9 @@ FALCOR_ENUM_REGISTER(PathReusePattern);
 #ifndef HOST_CODE
 __exported import StaticParams;
 __exported import Utils.Math.BitTricks;
+__exported import Scene.Material.TextureSampler;
 #endif
+
 
 /** Path tracer parmeters shared between host/device code.
 */
@@ -204,6 +206,18 @@ struct RestirPathTracerParams
         uint tileBits = kScreenTileBits.x + kScreenTileBits.y;
         uint pixelIdx = interleave_16bit(pixel) & ((1 << tileBits) - 1); // TODO: Use interleave_8bit() if kScreenTileBits <= 4.
         return tileOffset + pixelIdx;
+    }
+
+    /** Helper to create a texture sampler instance.
+    The method for computing texture level-of-detail depends on the configuration.
+    \param[in] path Path state.
+    \param[in] isPrimaryTriangleHit True if primary hit on a triangle.
+    \return Texture sampler instance.
+    */
+    ITextureSampler createTextureSampler(bool isPrimaryHit)
+    {
+        float lod = isPrimaryHit ? 0.f : lodBias;
+        return ExplicitLodTextureSampler(lod);
     }
 
 #endif

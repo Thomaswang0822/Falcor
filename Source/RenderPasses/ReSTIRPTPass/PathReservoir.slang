@@ -139,6 +139,7 @@ struct ReSTIRPathFlags
 
 };
 
+// 40 bytes
 struct ReconnectionData
 {
     HitInfo rcPrevHit; // 16 bytes
@@ -166,7 +167,6 @@ struct ReconnectionData
 
 // real time: RCDATA_PATH_NUM = 6, RCDATA_PAD_SIZE = 1  (256 bytes)
 // offline:   RCDATA_PATH_NUM = 12, RCDATA_PAD_SIZE = 2 (512 bytes)
-
 struct PixelReconnectionData
 {
     ReconnectionData data[RCDATA_PATH_NUM];

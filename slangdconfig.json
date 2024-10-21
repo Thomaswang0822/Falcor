@@ -2,6 +2,7 @@
     "slang.predefinedMacros": [
         "BPR=0",
         "RCDATA_PATH_NUM=6",
+        "RCDATA_PAD_SIZE=1",
         "USE_ENV_BACKGROUND=1",
         "RTXDI_INSTALLED=1",
         "USE_ALPHA_TEST=1",
@@ -41,6 +42,7 @@
         "MATERIAL_SYSTEM_BUFFER_DESC_COUNT=4",
         "MATERIAL_SYSTEM_TEXTURE_3D_DESC_COUNT=4",
         "FALCOR_MATERIAL_INSTANCE_SIZE=128",
+        "NEIGHBOR_OFFSET_COUNT=8192",
         "SCENE_USE_LIGHT_PROFILE=true",
         "SCENE_GEOMETRY_TYPES=110u",
         "SCENE_GRID_COUNT=64",

@@ -48,9 +48,6 @@ struct PathReusePass
     bool isValidScreenRegion(int2 pixel) { return all(pixel >= 0 && pixel < params.frameDim); }
 
 
-    /// 2024 UPDATE:
-    /// Previously, struct HitInfo stores unpacked data in an array of uint.
-    /// Now HitInfo has a PackedHitInfo field directly.
     ShadingData getPixelShadingData(int2 pixel, out PackedHitInfo PrimaryHitPacked)
     {
         ShadingData sd = {};
@@ -61,7 +58,7 @@ struct PathReusePass
             // HitInfo PrimaryHit; PrimaryHit.unpack(PrimaryHitPacked);
             HitInfo PrimaryHit = HitInfo(PrimaryHitPacked); // Initialize hit info from a packed hit info.
 
-            let lod = ExplicitLodTextureSampler(0.f);
+            let lod = params.createTextureSampler(true);
             sd = loadShadingData(PrimaryHit, ray.origin, ray.dir, lod);
         }
         return sd;

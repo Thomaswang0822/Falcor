@@ -183,7 +183,6 @@ namespace
     const std::string kUseNEE = "useNEE";
     const std::string kUseMIS = "useMIS";
     const std::string kUseRussianRoulette = "useRussianRoulette";
-    // const std::string kScreenSpaceReSTIROptions = "screenSpaceReSTIROptions";
 
     const std::string kUseAlphaTest = "useAlphaTest";
     const std::string kMaxNestedMaterials = "maxNestedMaterials";
@@ -288,8 +287,6 @@ ReSTIRPTPass::ReSTIRPTPass(ref<Device> pDevice, const Properties& props) : Rende
     if (!mpDevice->isFeatureSupported(Device::SupportedFeatures::RaytracingTier1_1))
         FALCOR_THROW("ReSTIRPTPass requires Raytracing Tier 1.1 support.");
 
-    //mSERSupported = mpDevice->isFeatureSupported(Device::SupportedFeatures::ShaderExecutionReorderingAPI);
-
     parseProperties(props);
     validateOptions();
 
@@ -303,9 +300,6 @@ ReSTIRPTPass::ReSTIRPTPass(ref<Device> pDevice, const Properties& props) : Rende
 
     // Create programs
     auto defines = mStaticParams.getDefines(*this);
-    // mpGeneratePaths = ComputePass::create(mpDevice, ProgramDesc().addShaderLibrary(kGeneratePathsFilename).csEntry("main"), defines, false);
-    // mpReflectTypes = ComputePass::create(mpDevice, ProgramDesc().addShaderLibrary(kReflectTypesFile).csEntry("main"), defines, false);
-    //mpResolvePass = ComputePass::create(mpDevice, ProgramDesc().addShaderLibrary(kResolvePassFilename).csEntry("main"), defines, false);
 
     // TODO: should those new passes be created here or lazily?
 
@@ -485,12 +479,6 @@ void ReSTIRPTPass::validateOptions()
         logWarning("Unsupported tex lod mode. Defaulting to Mip0.");
         mStaticParams.primaryLodMode = TexLODMode::Mip0;
     }
-
-    //if (mStaticParams.useSER && !mSERSupported)
-    //{
-    //    logWarning("Shader Execution Reordering (SER) is not supported on this device. Disabling SER.");
-    //    mStaticParams.useSER = false;
-    //}
 }
 
 Properties ReSTIRPTPass::getProperties() const
@@ -508,7 +496,7 @@ Properties ReSTIRPTPass::getProperties() const
     props[kMaxDiffuseBounces] = mStaticParams.maxDiffuseBounces;
     props[kMaxSpecularBounces] = mStaticParams.maxSpecularBounces;
     props[kMaxTransmissionBounces] = mStaticParams.maxTransmissionBounces;
-    //props[kAdjustShadingNormals] = mStaticParams.adjustShadingNormals;  // is a material param
+    props[kAdjustShadingNormals] = mStaticParams.adjustShadingNormals;  // is a material param
     props[kLODBias] = mParams.lodBias;
 
     // Sampling parameters
@@ -522,8 +510,6 @@ Properties ReSTIRPTPass::getProperties() const
     props[kMISHeuristic] = mStaticParams.misHeuristic;
     props[kMISPowerExponent] = mStaticParams.misPowerExponent;
     props[kEmissiveSampler] = mStaticParams.emissiveSampler;
-    if (mStaticParams.emissiveSampler == EmissiveLightSamplerType::LightBVH)
-        props[kLightBVHOptions] = mLightBVHOptions;
     props[kUseRussianRoulette] = mStaticParams.useRussianRoulette;
 
     // Material parameters
@@ -575,9 +561,6 @@ Properties ReSTIRPTPass::getProperties() const
     // Denoising parameters
     props[kUseNRDDemodulation] = mStaticParams.useNRDDemodulation;
 
-    // Scheduling parameters
-    //props[kUseSER] = mStaticParams.useSER;
-
     // Output parameters
     props[kOutputSize] = mOutputSizeSelection;
     if (mOutputSizeSelection == RenderPassHelpers::IOSize::Fixed)
@@ -624,9 +607,6 @@ void ReSTIRPTPass::setScene(RenderContext* pRenderContext, const ref<Scene>& pSc
 {
     mpScene = pScene;
     mParams.frameCount = 0;
-    // TODO: these 2 lines are new; does 2022 code put them somewhere else?
-    mParams.frameDim = {};
-    mParams.screenTiles = {};
 
     resetPrograms();
     resetLighting();
@@ -711,8 +691,6 @@ void ReSTIRPTPass::execute(RenderContext* pRenderContext, const RenderData& rend
             }
         }
 
-        /// mStaticParams.pathSamplingMode default to PathSamplingMode::ReSTIR
-        /// And, if both temporal and spatial reuses are off, nothing happens in this if.
         if (mStaticParams.pathSamplingMode != PathSamplingMode::PathTracing)
         {
             // Launch restir merge pass.
@@ -786,25 +764,6 @@ bool ReSTIRPTPass::renderRenderingUI(Gui::Widgets& widget)
 {
     bool dirty = false;
 
-    /// In Faclor 7.0, getGlobalClock() can only be called on a class that extends SampleApp
-    /// e.g. class HelloDXR : public SampleApp
-    /// But here ReSTIRPTPass extends RenderPass, and no obvious fix can handle this.
-    /*
-    if (mpScene && mpScene->hasAnimation())
-    {
-        if (gpFramework->getGlobalClock().isPaused())
-        {
-            if (widget.button("Resume Animation"))
-                gpFramework->getGlobalClock().play();
-        }
-        else
-        {
-            if (widget.button("Pause Animation"))
-                gpFramework->getGlobalClock().pause();
-        }
-    }
-    */
-
     bool pathSamplingModeChanged = widget.dropdown("Path Sampling Mode", kPathSamplingModeList, reinterpret_cast<uint32_t&>(mStaticParams.pathSamplingMode));
     if (pathSamplingModeChanged)
     {
@@ -816,7 +775,7 @@ bool ReSTIRPTPass::renderRenderingUI(Gui::Widgets& widget)
         else mStaticParams.separatePathBSDF = true;
     }
 
-    //if (auto group = widget.group("Path Reuse Controls", true))
+    if (auto group = widget.group("Path Reuse Controls", true))
     {
         dirty |= pathSamplingModeChanged;
 
@@ -830,7 +789,7 @@ bool ReSTIRPTPass::renderRenderingUI(Gui::Widgets& widget)
             dirty |= widget.var("Candidate Samples", mStaticParams.candidateSamples, 1u, 64u);
             widget.tooltip("Number candidate samples for ReSTIR PT.\n");
 
-            if (auto group = widget.group("Shift Mapping Options", true))
+            if (auto groupA = widget.group("Shift Mapping Options", true))
             {
                 if (widget.dropdown("Shift Mapping", kShiftMappingList, reinterpret_cast<uint32_t&>(mStaticParams.shiftStrategy)))
                 {
@@ -848,7 +807,7 @@ bool ReSTIRPTPass::renderRenderingUI(Gui::Widgets& widget)
 
         if (mStaticParams.pathSamplingMode == PathSamplingMode::ReSTIR && mStaticParams.shiftStrategy == ShiftMapping::Hybrid)
         {
-            if (auto group = widget.group("Local Strategies", true))
+            if (auto groupB = widget.group("Local Strategies", true))
             {
                 bool enableRoughnessCondition = mParams.localStrategyType & (uint32_t)LocalStrategy::RoughnessCondition;
                 bool enableDistanceCondition = mParams.localStrategyType & (uint32_t)LocalStrategy::DistanceCondition;
@@ -862,7 +821,7 @@ bool ReSTIRPTPass::renderRenderingUI(Gui::Widgets& widget)
                 }
             }
 
-            if (auto group = widget.group("Classification thresholds", true))
+            if (auto groupC = widget.group("Classification thresholds", true))
             {
                 dirty |= widget.var("Near field distance", mParams.nearFieldDistance, 0.f, 100.f);
                 dirty |= widget.var("Specular roughness threshold", mParams.specularRoughnessThreshold, 0.f, 1.f);
@@ -881,7 +840,7 @@ bool ReSTIRPTPass::renderRenderingUI(Gui::Widgets& widget)
         }
         else if (mStaticParams.pathSamplingMode == PathSamplingMode::ReSTIR && mEnableSpatialReuse)
         {
-            if (auto group = widget.group("Spatial reuse controls", true))
+            if (auto groupD = widget.group("Spatial reuse controls", true))
             {
                 dirty |= widget.var("Num Spatial Rounds", mNumSpatialRounds, 1, 5);
                 dirty |= widget.dropdown("Spatial Reuse Pattern", kSpatialReusePatternList, reinterpret_cast<uint32_t&>(mSpatialReusePattern));
@@ -904,7 +863,7 @@ bool ReSTIRPTPass::renderRenderingUI(Gui::Widgets& widget)
 
         if (mStaticParams.pathSamplingMode == PathSamplingMode::ReSTIR && mEnableTemporalReuse)
         {
-            if (auto group = widget.group("Temporal reuse controls", true))
+            if (auto groupE = widget.group("Temporal reuse controls", true))
             {
                 dirty |= widget.var("Temporal History Length", mTemporalHistoryLength, 0, 100);
                 dirty |= widget.checkbox("Use M capping", mUseMaxHistory);
@@ -918,7 +877,7 @@ bool ReSTIRPTPass::renderRenderingUI(Gui::Widgets& widget)
         }
     }
 
-    //if (auto group = widget.group("Shared Path Sampler Options", true))
+    if (auto group = widget.group("Shared Path Sampler Options", true))
 
     {
         dirty |= widget.var("Samples/pixel", mStaticParams.samplesPerPixel, 1u, kMaxSamplesPerPixel);
@@ -996,7 +955,7 @@ bool ReSTIRPTPass::renderRenderingUI(Gui::Widgets& widget)
 
             if (mpScene && mpScene->useEmissiveLights())
             {
-                if (auto group = widget.group("Emissive sampler"))
+                if (auto groupA = widget.group("Emissive sampler"))
                 {
                     if (widget.dropdown("Emissive sampler", kEmissiveSamplerList, (uint32_t&)mStaticParams.emissiveSampler))
                     {
@@ -1153,50 +1112,6 @@ ReSTIRPTPass::TracePass::TracePass(
     pBindingTable->setRayGen(desc.addRayGen("rayGen", globalTypeConformances));
     pBindingTable->setMiss(kMissScatter, desc.addMiss("scatterMiss"));
 
-    // Specify hit group entry points for every combination of geometry and material type.
-    // The code for each hit group gets specialized for the actual types it's operating on.
-    // First query which material types the scene has.
-    auto materialTypes = pScene->getMaterialSystem().getMaterialTypes();
-
-    for (const auto materialType : materialTypes)
-    {
-        auto typeConformances = pScene->getMaterialSystem().getTypeConformances(materialType);
-
-        /*
-        // Add hit groups for triangles.
-        if (auto geometryIDs = pScene->getGeometryIDs(Scene::GeometryType::TriangleMesh, materialType); !geometryIDs.empty())
-        {
-            auto shaderID =
-                desc.addHitGroup("scatterTriangleClosestHit", "scatterTriangleAnyHit", "", typeConformances, to_string(materialType));
-            pBindingTable->setHitGroup(kRayTypeScatter, geometryIDs, shaderID);
-        }
-
-        // Add hit groups for displaced triangle meshes.
-        if (auto geometryIDs = pScene->getGeometryIDs(Scene::GeometryType::DisplacedTriangleMesh, materialType); !geometryIDs.empty())
-        {
-            auto shaderID = desc.addHitGroup(
-                "scatterDisplacedTriangleMeshClosestHit", "", "displacedTriangleMeshIntersection", typeConformances, to_string(materialType)
-            );
-            pBindingTable->setHitGroup(kRayTypeScatter, geometryIDs, shaderID);
-        }
-
-        // Add hit groups for curves.
-        if (auto geometryIDs = pScene->getGeometryIDs(Scene::GeometryType::Curve, materialType); !geometryIDs.empty())
-        {
-            auto shaderID = desc.addHitGroup("scatterCurveClosestHit", "", "curveIntersection", typeConformances, to_string(materialType));
-            pBindingTable->setHitGroup(kRayTypeScatter, geometryIDs, shaderID);
-        }
-
-        // Add hit groups for SDF grids.
-        if (auto geometryIDs = pScene->getGeometryIDs(Scene::GeometryType::SDFGrid, materialType); !geometryIDs.empty())
-        {
-            auto shaderID =
-                desc.addHitGroup("scatterSdfGridClosestHit", "", "sdfGridIntersection", typeConformances, to_string(materialType));
-            pBindingTable->setHitGroup(kRayTypeScatter, geometryIDs, shaderID);
-        }
-        */
-    }
-
     pProgram = Program::create(pDevice, desc, defines);
 }
 
@@ -1321,7 +1236,6 @@ void ReSTIRPTPass::updatePrograms()
     };
 
     preparePass(mpGeneratePaths);
-    //preparePass(mpTracePass);
     preparePass(mpReflectTypes);
     preparePass(mpSpatialPathRetracePass);
     preparePass(mpTemporalPathRetracePass);
@@ -1347,34 +1261,8 @@ void ReSTIRPTPass::prepareResources(RenderContext* pRenderContext, const RenderD
         (size_t)Counters::kCount * sizeof(uint32_t)
     );
 
-    // Allocate output sample offset buffer if needed.
-    // This buffer stores the output offset to where the samples for each pixel are stored consecutively.
-    // The offsets are local to the current tile, so 16-bit format is sufficient and reduces bandwidth usage.
-    /// Not in their 2022 code
-    /*
-    if (!mFixedSampleCount)
-    {
-        if (!mpSampleOffset || mpSampleOffset->getWidth() != mParams.frameDim.x || mpSampleOffset->getHeight() != mParams.frameDim.y)
-        {
-            FALCOR_ASSERT(kScreenTileDim.x * kScreenTileDim.y * kMaxSamplesPerPixel <= (1u << 16));
-            mpSampleOffset = mpDevice->createTexture2D(
-                mParams.frameDim.x,
-                mParams.frameDim.y,
-                ResourceFormat::R16Uint,
-                1,
-                1,
-                nullptr,
-                ResourceBindFlags::ShaderResource | ResourceBindFlags::UnorderedAccess
-            );
-            mVarsChanged = true;
-        }
-    }
-    */
-
     auto var = mpReflectTypes->getRootVar();
 
-    /// NOTE: MemoryType::DeviceLocal was Buffer::CpuAccess::None in 2022 code
-    /// They both mean buffer is stored on device and CPU has no access
     if (mStaticParams.pathSamplingMode != PathSamplingMode::PathTracing)
     {
         if (mStaticParams.shiftStrategy == ShiftMapping::Hybrid &&
@@ -1654,21 +1542,13 @@ void ReSTIRPTPass::bindShaderData(const ShaderVar& var, const RenderData& render
     {
         if (isPathTracer && mpEnvMapSampler)
             mpEnvMapSampler->bindShaderData(var["envMapSampler"]);
-
-        // weren't there in 2022
-        //var["sampleOffset"] = mpSampleOffset; // Can be nullptr
-        //var["sampleColor"] = mpSampleColor;
-        //var["sampleGuideData"] = mpSampleGuideData;
     }
 
     var["params"].setBlob(mParams);
     var["vbuffer"] = renderData.getTexture(kInputVBuffer);
-    // var["viewDir"] = pViewDir;         // Can be nullptr
-    // var["sampleCount"] = pSampleCount; // Can be nullptr
     var["outputColor"] = renderData.getTexture(kOutputColor);
 
     // Bind runtime data.
-    //setNRDData(var["outputNRD"], renderData);
     if (mOutputNRDData && isPathTracer)
     {
         setNRDData(var["outputNRD"], renderData);
@@ -1707,25 +1587,6 @@ void ReSTIRPTPass::bindShaderData(const ShaderVar& var, const RenderData& render
         // TODO: Do we have to bind this every frame?
         mpEmissiveSampler->bindShaderData(var["emissiveSampler"]);
     }
-
-    /// Not in 2022 code
-    /*
-    ref<Texture> pViewDir;
-    if (mpScene->getCamera()->getApertureRadius() > 0.f)
-    {
-        pViewDir = renderData.getTexture(kInputViewDir);
-        if (!pViewDir)
-            logWarning("Depth-of-field requires the '{}' input. Expect incorrect rendering.", kInputViewDir);
-    }
-
-    ref<Texture> pSampleCount;
-    if (!mFixedSampleCount)
-    {
-        pSampleCount = renderData.getTexture(kInputSampleCount);
-        if (!pSampleCount)
-            FALCOR_THROW("ReSTIRPTPass: Missing sample count input texture");
-    }
-    */
 }
 
 bool ReSTIRPTPass::beginFrame(RenderContext* pRenderContext, const RenderData& renderData)
@@ -1805,16 +1666,6 @@ bool ReSTIRPTPass::beginFrame(RenderContext* pRenderContext, const RenderData& r
         mGBufferAdjustShadingNormals = gbufferAdjustShadingNormals;
         mRecompile = true;
     }
-    /*
-    /// NOT in ReSTIR PT
-    // Check if fixed sample count should be used. When the sample count input is connected we load the count from there instead.
-    mFixedSampleCount = renderData[kInputSampleCount] == nullptr;
-
-    // Check if guide data should be generated.
-    mOutputGuideData = renderData[kOutputAlbedo] != nullptr || renderData[kOutputSpecularAlbedo] != nullptr ||
-                       renderData[kOutputIndirectAlbedo] != nullptr || renderData[kOutputGuideNormal] != nullptr ||
-                       renderData[kOutputReflectionPosW] != nullptr;
-    */
 
     // Check if NRD data should be generated.
     mOutputNRDData =
@@ -1828,17 +1679,6 @@ bool ReSTIRPTPass::beginFrame(RenderContext* pRenderContext, const RenderData& r
 
     // Check if additional NRD data should be generated.
     bool prevOutputNRDAdditionalData = mOutputNRDAdditionalData;
-    /*
-    /// NOT in ReSTIR PT
-    mOutputNRDAdditionalData =
-        renderData[kOutputNRDDeltaReflectionRadianceHitDist] != nullptr ||
-        renderData[kOutputNRDDeltaTransmissionRadianceHitDist] != nullptr || renderData[kOutputNRDDeltaReflectionReflectance] != nullptr ||
-        renderData[kOutputNRDDeltaReflectionEmission] != nullptr || renderData[kOutputNRDDeltaReflectionNormWRoughMaterialID] != nullptr ||
-        renderData[kOutputNRDDeltaReflectionPathLength] != nullptr || renderData[kOutputNRDDeltaReflectionHitDist] != nullptr ||
-        renderData[kOutputNRDDeltaTransmissionReflectance] != nullptr || renderData[kOutputNRDDeltaTransmissionEmission] != nullptr ||
-        renderData[kOutputNRDDeltaTransmissionNormWRoughMaterialID] != nullptr ||
-        renderData[kOutputNRDDeltaTransmissionPathLength] != nullptr || renderData[kOutputNRDDeltaTransmissionPosW] != nullptr;
-    */
 
     if (mOutputNRDAdditionalData != prevOutputNRDAdditionalData)
         mRecompile = true;

@@ -146,7 +146,7 @@ float3 computeShiftedIntegrandHybrid(const RestirPathTracerParams params, bool u
     float3 dstRcPrevVertexWo;
     float3 Tp;
 
-    let lod = ExplicitLodTextureSampler(0.f);
+    let lod = params.createTextureSampler(true /* isPrimary */);
     // For dst vertex, create material instance and query its properties.
     let hints = getMaterialInstanceHints(dstPrimaryHit, true /* isPrimary */);
     let dstMI = gScene.materials.getMaterialInstance(dstPrimarySd, lod, hints);
@@ -307,7 +307,7 @@ float3 computeShiftedIntegrandReconnectionPathTree(const RestirPathTracerParams 
         if (any(srcPrimarySd.posW != dstPrimarySd.posW))
             return 0.f;
 
-    let lod = ExplicitLodTextureSampler(0.f);
+    let lod = params.createTextureSampler(true /* isPrimary */);
     ShadingData rcVertexSd = loadShadingDataWithPrevVertexPosition(rcVertexHit, dstPrimarySd.posW, lod);
     // get MaterialInstance of src, dst, and rc
     let srcHints = (uint)MaterialInstanceHints::None; // @see getMaterialInstanceHints()
@@ -476,7 +476,7 @@ float3 computeShiftedIntegrandReconnection(const RestirPathTracerParams params, 
     srcPrimarySd.posW = srcPrimarySd.computeRayOrigin(!isTransmission);
     dstPrimarySd.posW = dstPrimarySd.computeRayOrigin(!isTransmission);
 
-    let lod = ExplicitLodTextureSampler(0.f);
+    let lod = params.createTextureSampler(true /* isPrimary */);
     // get MaterialInstance of src, dst; that of rc is created later
     let srcHints = (uint)MaterialInstanceHints::None; // @see getMaterialInstanceHints()
     let dstHints = (uint)MaterialInstanceHints::None;

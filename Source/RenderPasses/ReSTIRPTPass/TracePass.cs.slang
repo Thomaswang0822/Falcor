@@ -29,24 +29,9 @@ void tracePath(uint pathID, inout PathReservoir giReservoir, uint sampleIdx)
         if (path.isHit())
         {
             gPathTracer.handleHit(path);
+
             if (path.isTerminated()) break;
 
-            //// ***DEBUG
-            //// EVERY path is terminated at length = 0
-            
-            //if (path.isTerminated()) {   // !path.isActive()
-            //    // GREEN
-            //    gPathTracer.outputColor[path.getPixel()] = 
-            //        float4(0.f, path.hit.getPrimitiveIndex() / 255.f, 0.f, 1.f);
-            //    return;
-            //}
-            //else {
-            //    // BLUE
-            //    gPathTracer.outputColor[path.getPixel()] = 
-            //        float4(0.f, 0.f, path.hit.getPrimitiveIndex() / 255.f, 1.f);
-            //    return;
-            //}
-            
             gPathTracer.nextVertex(path);
         }
         else
@@ -69,8 +54,6 @@ void scatterMiss(inout PathState path)
 // Shader entry point for ray generation shader.
 //
 
-// [numthreads(16, 16, 1)]
-// void main(uint3 dispatchThreadId : SV_DispatchThreadID)
 [shader("raygeneration")]
 void rayGen()
 {

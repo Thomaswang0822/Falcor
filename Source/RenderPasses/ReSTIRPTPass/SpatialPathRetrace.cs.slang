@@ -14,8 +14,7 @@ import Utils.Math.Ray;
 import Utils.Math.MathHelpers;
 import LoadShadingData;
 
-/** TODO.
-*/
+
 struct PathRetracePass
 {
     static const uint kNeighborOffsetCount = NEIGHBOR_OFFSET_COUNT;
@@ -63,9 +62,6 @@ struct PathRetracePass
         return dot(centralSd.frame.N, neighborSd.frame.N) >= 0.5f && abs(centralDist - neighborDist) < 0.1f * centralDist;
     }
 
-    /// 2024 UPDATE:
-    /// Previously, struct HitInfo stores unpacked data in an array of uint.
-    /// Now HitInfo has a PackedHitInfo field directly.
     ShadingData getPixelShadingData(int2 pixel, out PackedHitInfo PrimaryHitPacked)
     {
         ShadingData sd = {};
@@ -73,10 +69,9 @@ struct PathRetracePass
         PrimaryHitPacked = vbuffer[pixel];
         if (isValidPackedHitInfo(PrimaryHitPacked))
         {
-            // HitInfo PrimaryHit; PrimaryHit.unpack(PrimaryHitPacked);
             HitInfo PrimaryHit = HitInfo(PrimaryHitPacked); // Initialize hit info from a packed hit info.
 
-            let lod = ExplicitLodTextureSampler(0.f);
+            let lod = params.createTextureSampler(true /* isPrimary */);
             sd = loadShadingData(PrimaryHit, ray.origin, ray.dir, lod);
         }
         return sd;

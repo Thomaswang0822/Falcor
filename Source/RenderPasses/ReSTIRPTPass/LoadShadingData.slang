@@ -135,38 +135,6 @@ uint getMaterialInstanceHints(const HitInfo hit, const bool isPrimary)
     return hints;
 }
 
-/** Adjust ShadingData
-    \param[in,out] sd Shading data to update.
-    \param[in] hit Hit information.
-    \param[in] curveSphereRadius Curve sphere radius.
-    \param[in] v Vertex data.
-    \param[in] isPrimary True if this is the primary hit point.
-*/
-/** Falcor 7.0 UPDATE
-This function essentially calls a adjustShadingNormal(), which never appears in any 7.0 RenderPasses code.
-Thus, we disable it.
-
-Instead, it's likely replaced by getMaterialInstanceHints(), see LoadShadingData.slang of PathTracer pass.
-*/
-
-/**********
-void adjustShadingData(inout ShadingData sd, const HitInfo hit, const float curveSphereRadius, const VertexData v, const bool isPrimary)
-{
-    // Set sphere radius at the curve intersection point.
-    // Reuse the metallic field.
-#if SCENE_HAS_GEOMETRY_TYPE(GEOMETRY_TYPE_CURVE)
-    if (hit.getType() == HitType::Curve)
-        sd.metallic = curveSphereRadius;
-#endif
-
-#if GBUFFER_ADJUST_SHADING_NORMALS
-    if (kAdjustShadingNormals || isPrimary) adjustShadingNormal(sd, v);
-#else
-    if (kAdjustShadingNormals && !isPrimary) adjustShadingNormal(sd, v);
-#endif
-}
-***********/
-
 /** Setup ShadingData based on loaded vertex/material attributes for a hit point.
     \param[in] hit Hit information.
     \param[in] rayOrigin ray origin.

@@ -76,9 +76,6 @@ struct PathReusePass
         return dot(centralSd.frame.N, neighborSd.frame.N) >= 0.5f && abs(centralDist - neighborDist) < 0.1f * centralDist;
     }
 
-    /// 2024 UPDATE:
-    /// Previously, struct HitInfo stores unpacked data in an array of uint.
-    /// Now HitInfo has a PackedHitInfo field directly.
     ShadingData getPixelShadingData(int2 pixel, out PackedHitInfo PrimaryHitPacked)
     {
         ShadingData sd = {};
@@ -86,10 +83,9 @@ struct PathReusePass
         PrimaryHitPacked = vbuffer[pixel];
         if (isValidPackedHitInfo(PrimaryHitPacked))
         {
-            // HitInfo PrimaryHit; PrimaryHit.unpack(PrimaryHitPacked);
             HitInfo PrimaryHit = HitInfo(PrimaryHitPacked); // Initialize hit info from a packed hit info.
 
-            let lod = ExplicitLodTextureSampler(0.f);
+            let lod = params.createTextureSampler(true /* isPrimary */);
             sd = loadShadingData(PrimaryHit, ray.origin, ray.dir, lod);
         }
         return sd;
@@ -165,14 +161,13 @@ struct PathReusePass
         float centralM = dstReservoir.M;
         PackedHitInfo centralPrimaryHitPacked;
         ShadingData centralPrimarySd = getPixelShadingData(pixel, centralPrimaryHitPacked);
-
-        // Create a texture sampler and a material hints for primary hit
-        let lod = ExplicitLodTextureSampler(0.f);
         HitInfo centralPrimaryHit = HitInfo(centralPrimaryHitPacked);
+
+        let lod = params.createTextureSampler(true /* isPrimary */);
+
+        // Create BSDF instance and query its properties.
         let centralHints = getMaterialInstanceHints(centralPrimaryHit, true /* isPrimary */);
-        // such that we can fetch a material instance
         const IMaterialInstance centralMI = gScene.materials.getMaterialInstance(centralPrimarySd, lod, centralHints);
-        // and then a BSDFProperties
         BSDFProperties centralBSDFprop = centralMI.getProperties(centralPrimarySd);
 
 
@@ -572,7 +567,6 @@ struct PathReusePass
                 float3 radiance = 0.f;
                 NRDPathType pathType = NRDPathType::Residual;
 
-                //
                 if (ShiftMapping(kShiftStrategy) == ShiftMapping::Reconnection ||
                     ShiftMapping(kShiftStrategy) == ShiftMapping::Hybrid && dstReservoir.pathFlags.rcVertexLength() == 1)  //rcVertexHit must exists
                 {
@@ -599,8 +593,6 @@ struct PathReusePass
                 }
                 else
                 {
-                    // Has been created globally
-                    // HitInfo centralPrimaryHit = HitInfo(centralPrimaryHitPacked);
                     Ray ray = Ray(gScene.camera.getPosition(), -centralPrimarySd.V, 0, kRayTMax);
 
                     traceDenoiserData(params, centralPrimaryHitPacked, centralPrimarySd,
