@@ -14,6 +14,8 @@ def render_graph_ReSTIRPT():
     g.addPass(AccumulatePass, "AccumulatePass")
     ToneMapper = createPass("ToneMapper", {'autoExposure': False, 'exposureCompensation': 0.0})
     g.addPass(ToneMapper, "ToneMapper")
+    Denoiser = createPass("OptixDenoiser", {'enabled': False})
+    g.addPass(Denoiser, "Denoiser")
 
     # Add edges to connect passes
     g.addEdge("VBufferRT.vbuffer", "ReSTIRPTPass.vbuffer")
@@ -27,7 +29,14 @@ def render_graph_ReSTIRPT():
     g.addEdge("VBufferRT.mvec", "RTXDIPass.mvec")
     g.addEdge("RTXDIPass.color", "ReSTIRPTPass.directLighting")
 
-    g.addEdge("ReSTIRPTPass.color", "AccumulatePass.input")
+    # denoiser input, see OptixDenoiser.cpp
+    g.addEdge("ReSTIRPTPass.color", "Denoiser.color")
+    g.addEdge("VBufferRT.mvec", "Denoiser.mvec")
+    # but turns out albedo and normal bring negative effect for ReSTIR PT
+    g.addEdge("ReSTIRPTPass.albedo", "Denoiser.albedo")
+    g.addEdge("ReSTIRPTPass.normal", "Denoiser.normal")
+
+    g.addEdge("Denoiser.output", "AccumulatePass.input")
     g.addEdge("AccumulatePass.output", "ToneMapper.src")
 
     g.markOutput("ToneMapper.dst")
