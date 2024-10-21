@@ -30,6 +30,10 @@
  # Copyright (c) 2022, Daqi Lin.  All rights reserved.
  **************************************************************************/
 
+/***************************************************************************
+ # Copyright (c) 2024, Haoxuan Wang.  All rights reserved.
+ **************************************************************************/
+
 #include "ReSTIRPTPass.h"
 #include "RenderGraph/RenderPassHelpers.h"
 #include "RenderGraph/RenderPassStandardFlags.h"

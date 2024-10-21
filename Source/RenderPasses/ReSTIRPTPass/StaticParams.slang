@@ -1,6 +1,11 @@
 /***************************************************************************
  # Copyright (c) 2022, Daqi Lin.  All rights reserved.
  **************************************************************************/
+
+/***************************************************************************
+ # Copyright (c) 2024, Haoxuan Wang.  All rights reserved.
+ **************************************************************************/
+
 __exported import Rendering.Materials.TexLODTypes;
 
 /** Translation of defines set by the host to compile-time constants used to
@@ -11,6 +16,9 @@ __exported import Rendering.Materials.TexLODTypes;
 #ifndef SAMPLES_PER_PIXEL
 #error StaticParams.slang is missing defines
 #endif
+
+/// If using Slang Language extension in VS, these macros can but defined in
+/// under root to avoid IntelliSense error.
 
 static const uint kSamplesPerPixel = SAMPLES_PER_PIXEL;
 static const uint kCandidateSamples = CANDIDATE_SAMPLES;

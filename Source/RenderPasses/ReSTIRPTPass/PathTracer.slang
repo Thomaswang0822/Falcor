@@ -2,6 +2,10 @@
  # Copyright (c) 2022, Daqi Lin.  All rights reserved.
  **************************************************************************/
 
+/***************************************************************************
+ # Copyright (c) 2024, Haoxuan Wang.  All rights reserved.
+ **************************************************************************/
+
 import Scene.RaytracingInline;
 import Rendering.Lights.EnvMapSampler;
 import Rendering.Lights.EmissiveLightSampler;
@@ -20,6 +24,7 @@ import RenderPasses.Shared.Denoising.NRDData;
 import RenderPasses.Shared.Denoising.NRDHelpers;
 import RenderPasses.Shared.Denoising.NRDConstants;
 import NRDHelpers;
+import Helpers;
 import Utils.Color.ColorHelpers;
 import Utils.Geometry.GeometryHelpers;
 import Utils.Debug.PixelDebug;
@@ -484,6 +489,10 @@ struct PathTracer
         assert(smi != none);
         BSDFSample result;
         BSDFProperties bsdfProp = mi.getProperties(sd);
+        // Also reconstruct a StandardBSDF
+        float3 wiLocal = smi.value.sf.toLocal(sd.V);
+        float3 woLocal = smi.value.sf.toLocal(dir);
+        StandardBSDF sbsdf = StandardBSDF(wiLocal, sd.mtl, smi.value.data);
 
         bool isDeltaEvent = path.pathBuilder.pathFlags.decodeIsDeltaEvent(path.length < 1);
         bool isSpecularBounce = path.pathBuilder.pathFlags.decodeIsSpecularBounce(path.length < 1);
@@ -499,14 +508,12 @@ struct PathTracer
 
                 uint allowedBSDFFlags = getAllowedBSDFFlags(isSpecularBounce);
 
-                result.weight = evalBSDFCosine(sd, smi.value, dir, allowedBSDFFlags);
-                //result.weight = mi.eval(sd, dir, path.sg);
+                result.weight = evalBSDFCosine(sbsdf, wiLocal, woLocal, allowedBSDFFlags);
 
                 if (kUseBSDFSampling)
                 {
                     // this is single pdf
-                    result.pdf = evalPdfBSDF(sd, smi.value, result.wo, pdfAll, allowedBSDFFlags, false);
-                    //result.pdf = mi.evalPdf(sd, result.wo);
+                    result.pdf = evalPdfBSDF(sbsdf, wiLocal, woLocal, pdfAll, allowedBSDFFlags, false);
                 }
                 else
                 {
@@ -559,7 +566,6 @@ struct PathTracer
                 // Update interior list and inside volume flag.
                 if (!sd.mtl.isThinSurface())
                 {
-                    // uint nestedPriority = gScene.materials[sd.materialID].getNestedPriority();
                     uint nestedPriority = sd.mtl.getNestedPriority();
                     path.interiorList.handleIntersection(sd.materialID, nestedPriority, sd.frontFacing);
                     path.setInsideDielectricVolume(!path.interiorList.isEmpty());
@@ -1090,6 +1096,10 @@ struct PathTracer
         assert(smi != none);
         const uint activeLobes = sd.mtl.getActiveLobes();
         BSDFProperties bsdfProp = mi.getProperties(sd);
+        // Also reconstruct a StandardBSDF
+        float3 wiLocal = smi.value.sf.toLocal(sd.V);
+        // float3 woLocal = smi.value.sf.toLocal(ls.dir);
+        StandardBSDF sbsdf = StandardBSDF(wiLocal, sd.mtl, smi.value.data);
 
         // Optionally disable emissive lights inside volumes.
         if (!kUseLightsInDielectricVolumes && path.isInsideDielectricVolume()) {
@@ -1434,8 +1444,8 @@ struct PathTracer
                     }
                     ls.Li *= misWeight;
 
-                    float3 weight = evalBSDFCosine(sd, smi.value, ls.dir);
-                    // float3 weight = mi.eval(sd, ls.dir, path.sg);
+                    float3 woLocal = smi.value.sf.toLocal(ls.dir);
+                    float3 weight = evalBSDFCosine(sbsdf, wiLocal, woLocal);
 
                     float3 Lr = weight * ls.Li * path.getCurrentThp();
 
@@ -2209,90 +2219,3 @@ struct PathTracer
     }
 
 };
-
-/** The deprecated code is
-bool hasRoughComponent(const ShadingData sd, float roughnessThreshold) {
-    return pDiffuseReflection > 0 || sd.linearRoughness > roughnessThreshold;
-}
-
-IMPORTANT NOTE:
-sd.linearRoughness in old 2022 code should be the same as bsdfProp.roughness
-Source\Falcor\RenderPasses\Shared\Denoising\NRDHelpers.slang (exists in both codebases), function float3 getMaterialReflectanceForDeltaPaths()
-float ggxAlpha = sd.linearRoughness * sd.linearRoughness;
-======
-const float ggxAlpha = bsdfProperties.roughness * bsdfProperties.roughness;
-*/
-bool hasRoughComponent(const uint activeLobes, const float roughness, float roughnessThreshold) {
-    // no need to build full StandardBSDF
-
-    // pDiffuseReflection =
-    //         (activeLobes & (uint)LobeType::DiffuseReflection) ? detach(diffuseWeight * dielectricBSDF * (1.f - diffTrans)) : 0.f;
-    return bool(activeLobes & (uint)LobeType::DiffuseReflection) || roughness > roughnessThreshold;
-}
-
-enum class SampledBSDFFlags
-{
-    DiffuseReflection = 1,
-    DiffuseTransmission = 2,
-    SpecularReflection = 4,
-    SpecularTransmission = 8
-};
-
-float evalPdfBSDF(const ShadingData sd, const StandardMaterialInstance mi, float3 wo, out float pdfAll, uint allowedSampledTypes = -1, bool allowDeltaEval = false)
-{
-    // @see Rendering.Materials.StandardMaterialInstance, evalPdf().
-    float3 wiLocal = mi.sf.toLocal(sd.V);
-    float3 woLocal = mi.sf.toLocal(wo);
-    StandardBSDF bsdf = StandardBSDF(wiLocal, sd.mtl, mi.data);
-
-    // manually unroll bsdf.evalPdfAll(wo, wi, pdfAll, allowedSampledFlags, allowDeltaEval);
-    pdfAll = 0.f;
-    float pdfSingle = 0.f;
-    if (!allowDeltaEval && bsdf.pDiffuseReflection > 0.f)
-    {
-        float pdf = bsdf.pDiffuseReflection * bsdf.diffuseReflection.evalPdf(wiLocal, woLocal);
-        if (allowedSampledTypes & uint(SampledBSDFFlags::DiffuseReflection)) pdfSingle += pdf;
-        pdfAll += pdf;
-    }
-    if (!allowDeltaEval && bsdf.pDiffuseTransmission > 0.f)
-    {
-        float pdf = bsdf.pDiffuseTransmission * bsdf.diffuseTransmission.evalPdf(wiLocal, woLocal);
-        if (allowedSampledTypes & uint(SampledBSDFFlags::DiffuseTransmission)) pdfSingle += pdf;
-        pdfAll += pdf;
-    }
-    if (bsdf.pSpecularReflection > 0.f)
-    {
-        float pdf = bsdf.pSpecularReflection * bsdf.specularReflection.evalPdf(wiLocal, woLocal /*, allowDeltaEval*/);
-        if (allowedSampledTypes & uint(SampledBSDFFlags::SpecularReflection)) pdfSingle += pdf;
-        pdfAll += pdf;
-    }
-    if (bsdf.pSpecularTransmission > 0.f)
-    {
-        float pdf = bsdf.pSpecularTransmission * bsdf.specularTransmission.evalPdf(wiLocal, woLocal /*, allowDeltaEval*/);
-        if (allowedSampledTypes & uint(SampledBSDFFlags::SpecularTransmission)) pdfSingle += pdf;
-        pdfAll += pdf;
-    }
-    return pdfSingle;
-}
-
-float3 evalBSDFCosine(const ShadingData sd, const StandardMaterialInstance mi, float3 wo, uint allowedSampledTypes = -1, bool allowDeltaEval = false)
-{
-    float3 wiLocal = mi.sf.toLocal(sd.V);
-    float3 woLocal = mi.sf.toLocal(wo);
-    StandardBSDF bsdf = StandardBSDF(wiLocal, sd.mtl, mi.data);
-
-    // return bsdf.eval(wiLocal, woLocal, allowedSampledFlags, allowDeltaEval);
-    SampleGenerator dummySG;
-
-    float3 result = 0.f;
-    if ((allowedSampledTypes & uint(SampledBSDFFlags::DiffuseReflection)) && bsdf.pDiffuseReflection > 0.f && !allowDeltaEval)
-        result += (1.f - bsdf.specTrans) * (1.f - bsdf.diffTrans) * bsdf.diffuseReflection.eval(wiLocal, woLocal, dummySG);
-    if ((allowedSampledTypes & uint(SampledBSDFFlags::DiffuseTransmission)) && bsdf.pDiffuseTransmission > 0.f && !allowDeltaEval)
-        result += (1.f - bsdf.specTrans) * bsdf.diffTrans * bsdf.diffuseTransmission.eval(wiLocal, woLocal, dummySG);
-    if ((allowedSampledTypes & uint(SampledBSDFFlags::SpecularReflection)) && bsdf.pSpecularReflection > 0.f)
-        result += (1.f - bsdf.specTrans) * bsdf.specularReflection.eval(wiLocal, woLocal, dummySG);
-    if ((allowedSampledTypes & uint(SampledBSDFFlags::SpecularTransmission)) && bsdf.pSpecularTransmission > 0.f)
-        result += bsdf.specTrans * (bsdf.specularTransmission.eval(wiLocal, woLocal, dummySG));
-
-    return result;
-}

@@ -34,7 +34,6 @@ import Rendering.Materials.TexLODHelpers;
 import Params;
 import Utils.Debug.PixelDebug;
 
-// This was in 2022 SceneDefines.slangh, but not in Falcor 7.0
 #define IS_SET(flags, type) ((flags) & (type))
 
 /** Compute derivatives at primarty triangle hit.

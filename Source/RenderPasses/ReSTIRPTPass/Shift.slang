@@ -2,6 +2,10 @@
  # Copyright (c) 2022, Daqi Lin.  All rights reserved.
  **************************************************************************/
 
+/***************************************************************************
+ # Copyright (c) 2024, Haoxuan Wang.  All rights reserved.
+ **************************************************************************/
+
 #include "Utils/Math/MathConstants.slangh"
 
 import PathReservoir;
@@ -14,19 +18,11 @@ import Rendering.Materials.BSDFs.StandardBSDF;
 import Rendering.Materials.StandardMaterialInstance;
 import Scene.RaytracingInline;
 import Scene.Scene;
+import Helpers;
 import PathTracer;
 import RenderPasses.Shared.Denoising.NRDData;
 
 ParameterBlock<PathTracer> gPathTracer;
-
-/// Function parameter NOTE:
-/// const ShadingData dstPrimarySd and const ShadingData srcPrimarySd are passed in with
-/// tneighborPrimarySd and centralPrimarySd respecively. (see {Spatial | Temporal}Reuse.cs.slang).
-/// They should mean ShadingData at temporal neightbor and ShadingData at current pixel.
-
-/*** Deprecated Rendering.Materials.MaterialShading code
-getBSDFLobes() -> IMaterialInstance::getLobeTypes()
-***/
 
 float3 computeShiftedIntegrandExtraOutput(
     const RestirPathTracerParams params, inout float dstJacobian, inout float output2, const PackedHitInfo dstPrimaryHitPacked, const ShadingData dstPrimarySd,
@@ -316,14 +312,29 @@ float3 computeShiftedIntegrandReconnectionPathTree(const RestirPathTracerParams 
     let srcMI = gScene.materials.getMaterialInstance(srcPrimarySd, lod, srcHints);
     let dstMI = gScene.materials.getMaterialInstance(dstPrimarySd, lod, dstHints);
     let rcMI = gScene.materials.getMaterialInstance(rcVertexSd, lod, rcHints);
-    Optional<StandardMaterialInstance> rcSMI = rcMI as StandardMaterialInstance;
-    assert(rcSMI != none);
-    // and a SampleGenerator since MaterialInstance::eval() needs it
-    SampleGenerator sg = SampleGenerator(srcReservoir.initRandomSeed);
 
     // need to evaluate source PDF of BSDF sampling
     float3 dstConnectionV = -rcVertexSd.V; // direction point from dst primary hit point to reconnection vertex
     float3 srcConnectionV = normalize(rcVertexSd.posW - srcPrimarySd.posW);
+
+    // so we need 3 StandBSDF
+    Optional<StandardMaterialInstance> rcSMI = rcMI as StandardMaterialInstance;
+    assert(rcSMI != none);
+    float3 wiLocalRC = rcSMI.value.sf.toLocal(rcVertexSd.V);
+    float3 woLocalRC = rcSMI.value.sf.toLocal(rcVertexWi);
+    StandardBSDF sbsdfRC = StandardBSDF(wiLocalRC, rcVertexSd.mtl, rcSMI.value.data);
+
+    Optional<StandardMaterialInstance> srcSMI = srcMI as StandardMaterialInstance;
+    assert(srcSMI != none);
+    float3 wiLocalSRC = srcSMI.value.sf.toLocal(srcPrimarySd.V);
+    float3 woLocalSRC = srcSMI.value.sf.toLocal(srcConnectionV);
+    StandardBSDF sbsdfSRC = StandardBSDF(wiLocalSRC, srcPrimarySd.mtl, srcSMI.value.data);
+
+    Optional<StandardMaterialInstance> dstSMI = dstMI as StandardMaterialInstance;
+    assert(dstSMI != none);
+    float3 wiLocalDST = dstSMI.value.sf.toLocal(dstPrimarySd.V);
+    float3 woLocalDST = dstSMI.value.sf.toLocal(dstConnectionV);
+    StandardBSDF sbsdfDST = StandardBSDF(wiLocalDST, dstPrimarySd.mtl, dstSMI.value.data);
 
     float3 shiftedDisp = rcVertexSd.posW - dstPrimarySd.posW;
     float shifted_dist2 = dot(shiftedDisp, shiftedDisp);
@@ -341,17 +352,15 @@ float3 computeShiftedIntegrandReconnectionPathTree(const RestirPathTracerParams 
     uint allowedSampledTypes1 = getAllowedBSDFFlags(srcReservoir.pathFlags.decodeIsSpecularBounce(true));
 
     // assuming bsdf sampling
-    // float dstPDF1 = evalPdfBSDF(dstPrimarySd, dstConnectionV, allowedSampledTypes1, isDelta1);
-    float dstPDF1 = dstMI.evalPdf(dstPrimarySd, dstConnectionV); // **
-    // float srcPDF1 = evalPdfBSDF(srcPrimarySd, srcConnectionV, allowedSampledTypes1, isDelta1);
-    float srcPDF1 = srcMI.evalPdf(srcPrimarySd, dstConnectionV); // **
+    float dstPDF1 = evalPdfBSDF(sbsdfDST, wiLocalDST, woLocalDST, allowedSampledTypes1, isDelta1);
+    float srcPDF1 = evalPdfBSDF(sbsdfSRC, wiLocalSRC, woLocalSRC, allowedSampledTypes1, isDelta1);
 
     Jacobian *= dstPDF1 / srcPDF1; // this is the only jacobian we need for computing MIS weight for path reuse NEE
 
     if (isJacobianInvalid(Jacobian)) return 0.f;
 
-    // float3 dstF1 = evalBSDFCosine(dstPrimarySd, dstConnectionV, allowedSampledTypes1, isDelta1);
-    float3 dstF1 = dstMI.eval(dstPrimarySd, dstConnectionV, sg);
+    float3 dstF1 = evalBSDFCosine(sbsdfDST, wiLocalDST, woLocalDST, allowedSampledTypes1, isDelta1);
+    // float3 dstF1 = dstMI.eval(dstPrimarySd, dstConnectionV, sg);
     float3 dstIntegrand = dstF1 / dstPDF1;
 
     float3 dstIntegrandNEE;
@@ -362,6 +371,7 @@ float3 computeShiftedIntegrandReconnectionPathTree(const RestirPathTracerParams 
     dstIntegrandNEE = 0.f;
     if (kUseNEE && any(srcReservoir.rcVertexIrradiance[1] > 0.f))
     {
+        SampleGenerator sg;
         // float3 dstF2NEE = evalBSDFCosine(rcVertexSd, srcReservoir.rcVertexWi[1]);
         float3 dstF2NEE = rcMI.eval(rcVertexSd, srcReservoir.rcVertexWi[1], sg);
         float dstPDF2NEE = srcReservoir.rcLightPdf;
@@ -388,19 +398,13 @@ float3 computeShiftedIntegrandReconnectionPathTree(const RestirPathTracerParams 
         float dstRcVertexScatterPdfAll = 0.f;
 
         // assuming bsdf sampling
-        // float dstRcVertexScatterPdf = evalPdfBSDF(rcVertexSd, rcVertexWi, dstRcVertexScatterPdfAll, allowedSampledTypes2, isDelta2);
-        float dstRcVertexScatterPdf = evalPdfBSDF(rcVertexSd, rcSMI.value, rcVertexWi, dstRcVertexScatterPdfAll, allowedSampledTypes2, isDelta2);
+        float dstRcVertexScatterPdf = evalPdfBSDF(sbsdfRC, wiLocalRC, woLocalRC, dstRcVertexScatterPdfAll, allowedSampledTypes2, isDelta2);
 
-        /// Other than setting sd.V = V for the `in ShadingData sd`, evalPdfBSDFWithV() has no difference than evalPdfBSDF().
-        /// And NOTE float3 dstConnectionV = -rcVertexSd.V; has been executed earlier.
-        // float srcRcVertexScatterPdf = evalPdfBSDFWithV(rcVertexSd, -srcConnectionV, rcVertexWi, allowedSampledTypes2, isDelta2);
-        rcVertexSd.V = -srcConnectionV;
-        float srcRcVertexScatterPdf = rcMI.evalPdf(rcVertexSd, rcVertexWi);
-        rcVertexSd.V = -dstConnectionV;
+        /// special evaluation, see function commentin Helpers.slang
+        float srcRcVertexScatterPdf = evalPdfBSDFWithV(rcVertexSd, rcSMI.value, -srcConnectionV, rcVertexWi, allowedSampledTypes2, isDelta2);
+
         float dstPDF2 = dstRcVertexScatterPdf;
-
-        // float3 dstF2 = evalBSDFCosine(rcVertexSd, rcVertexWi, allowedSampledTypes2, isDelta2);
-        float3 dstF2 = rcMI.eval(rcVertexSd, rcVertexWi, sg);
+        float3 dstF2 = evalBSDFCosine(sbsdfRC, wiLocalRC, woLocalRC, allowedSampledTypes2, isDelta2);
 
         float lightPdfBSDFSampling = srcReservoir.lightPdf;
 
@@ -483,11 +487,18 @@ float3 computeShiftedIntegrandReconnection(const RestirPathTracerParams params, 
     let srcMI = gScene.materials.getMaterialInstance(srcPrimarySd, lod, srcHints);
     Optional<StandardMaterialInstance> srcSMI = srcMI as StandardMaterialInstance;
     assert(srcSMI != none);
+    // Also reconstruct a StandardBSDF
+    float3 wiLocalSRC = srcSMI.value.sf.toLocal(srcPrimarySd.V);
+    // float3 woLocalSRC = srcSMI.value.sf.toLocal(srcConnectionV);
+    StandardBSDF sbsdfSRC = StandardBSDF(wiLocalSRC, srcPrimarySd.mtl, srcSMI.value.data);
+
     let dstMI = gScene.materials.getMaterialInstance(dstPrimarySd, lod, dstHints);
     Optional<StandardMaterialInstance> dstSMI = dstMI as StandardMaterialInstance;
     assert(dstSMI != none);
-    // and a SampleGenerator since MaterialInstance::eval() needs it
-    SampleGenerator sg = SampleGenerator(srcReservoir.initRandomSeed);
+    // Also reconstruct a StandardBSDF
+    float3 wiLocalDST = dstSMI.value.sf.toLocal(dstPrimarySd.V);
+    // float3 woLocalDST = dstSMI.value.sf.toLocal(wi);
+    StandardBSDF sbsdfDST = StandardBSDF(wiLocalDST, dstPrimarySd.mtl, dstSMI.value.data);
 
     // generally not entering this if
     if (!rcVertexHitExists)
@@ -497,17 +508,16 @@ float3 computeShiftedIntegrandReconnection(const RestirPathTracerParams params, 
         if (kUseMIS && srcReservoir.pathFlags.lightType() == (uint)PathTracer::LightSampleType::EnvMap && srcReservoir.pathFlags.pathLength() + 1 == rcVertexLength && !srcReservoir.pathFlags.lastVertexNEE())
         {
             float3 wi = rcVertexWi;
+            float3 woLocalDST = dstSMI.value.sf.toLocal(wi);
             bool isVisible = evalSegmentVisibility(dstPrimarySd.posW, wi, true); // test along a direction
             if (isVisible)
             {
                 float srcPDF1 = useCachedJacobian ? srcReservoir.cachedJacobian.x : srcMI.evalPdf(srcPrimarySd, wi);
                 float dstPDF1All;
-                // float dstPDF1 = evalPdfBSDF(dstPrimarySd, wi, dstPDF1All, allowedSampledTypes1);
-                float dstPDF1 = evalPdfBSDF(dstPrimarySd, dstSMI.value, wi, dstPDF1All, allowedSampledTypes1);
+                float dstPDF1 = evalPdfBSDF(sbsdfDST, wiLocalDST, woLocalDST, dstPDF1All, allowedSampledTypes1);
 
                 dstCachedJacobian.x = dstPDF1;
-                float3 dstF1 = evalBSDFCosine(dstPrimarySd, dstSMI.value, wi, allowedSampledTypes1);
-                // float3 dstF1 = dstMI.eval(dstPrimarySd, wi, sg);
+                float3 dstF1 = evalBSDFCosine(sbsdfDST, wiLocalDST, woLocalDST, allowedSampledTypes1);
                 float misWeight = PathTracer::evalMIS(1, dstPDF1All, 1, srcReservoir.lightPdf);//   dstPDF1 / (dstPDF1 + srcReservoir.lightPdf);
                 dstIntegrand = dstF1 / dstPDF1 * misWeight * rcVertexIrradiance;
                 dstJacobian = dstPDF1 / srcPDF1;
@@ -540,6 +550,10 @@ float3 computeShiftedIntegrandReconnection(const RestirPathTracerParams params, 
     let rcMI = gScene.materials.getMaterialInstance(rcVertexSd, lod, rcHints);
     Optional<StandardMaterialInstance> rcSMI = rcMI as StandardMaterialInstance;
     assert(rcSMI != none);
+    // Also reconstruct a StandardBSDF
+    float3 wiLocalRC = rcSMI.value.sf.toLocal(rcVertexSd.V);
+    float3 woLocalRC = rcSMI.value.sf.toLocal(rcVertexWi);
+    StandardBSDF sbsdfRC = StandardBSDF(wiLocalRC, rcVertexSd.mtl, rcSMI.value.data);
 
     // need to evaluate source PDF of BSDF sampling
     float3 dstConnectionV = -rcVertexSd.V; // direction point from dst primary hit point to reconnection vertex
@@ -574,24 +588,22 @@ float3 computeShiftedIntegrandReconnection(const RestirPathTracerParams params, 
     // assuming bsdf sampling
     float dstPDF1All = 0.f;
 
-    // float dstPDF1 = evalPdfBSDF(dstPrimarySd, dstConnectionV, dstPDF1All, allowedSampledTypes1);
-    float dstPDF1 = evalPdfBSDF(dstPrimarySd, dstSMI.value, dstConnectionV, dstPDF1All, allowedSampledTypes1);
-    //float dstPDF1 = dstMI.evalPdf(dstPrimarySd, dstConnectionV);  // **
-
-    //dstPDF1All = dstPDF1; // @see debug log
+    float3 woLocalDST = dstSMI.value.sf.toLocal(dstConnectionV);
+    float dstPDF1 = evalPdfBSDF(sbsdfDST, wiLocalDST, woLocalDST, dstPDF1All, allowedSampledTypes1);
 
     dstCachedJacobian.x = dstPDF1;
+
+    float3 woLocalSRC = srcSMI.value.sf.toLocal(srcConnectionV);
     float srcPDF1 = useCachedJacobian ?
         srcReservoir.cachedJacobian.x :
-        evalPdfBSDF(srcPrimarySd, srcSMI.value, srcConnectionV, allowedSampledTypes1);
-        //srcMI.evalPdf(srcPrimarySd, srcConnectionV);  // **
+        evalPdfBSDF(sbsdfSRC, wiLocalSRC, woLocalSRC, allowedSampledTypes1);
 
     Jacobian *= dstPDF1 / srcPDF1;
 
     if (isJacobianInvalid(Jacobian)) return 0.f;
 
-    float3 dstF1 = evalBSDFCosine(dstPrimarySd, dstSMI.value, dstConnectionV, allowedSampledTypes1);
-    // float3 dstF1 = dstMI.eval(dstPrimarySd, dstConnectionV, sg);
+    
+    float3 dstF1 = evalBSDFCosine(sbsdfDST, wiLocalDST, woLocalDST, allowedSampledTypes1);
 
     float dstRcVertexScatterPdfAll = 0.f;
     float dstPDF2 = 1.f;
@@ -603,16 +615,13 @@ float3 computeShiftedIntegrandReconnection(const RestirPathTracerParams params, 
     if (!isRcVertexEscapedVertex)
     {
         // assuming bsdf sampling
-        dstRcVertexScatterPdf = evalPdfBSDF(rcVertexSd, rcSMI.value, rcVertexWi, dstRcVertexScatterPdfAll, allowedSampledTypes2);
-
-        //dstRcVertexScatterPdf = rcMI.evalPdf(rcVertexSd, rcVertexWi);
-        //dstRcVertexScatterPdfAll = dstRcVertexScatterPdf; // @see debug log
+        dstRcVertexScatterPdf = evalPdfBSDF(sbsdfRC, wiLocalRC, woLocalRC, dstRcVertexScatterPdfAll, allowedSampledTypes2);
 
         dstCachedJacobian.y = dstRcVertexScatterPdf;
         srcRcVertexScatterPdf = useCachedJacobian ?
             srcReservoir.cachedJacobian.y :
+            /// special evaluation, see function commentin Helpers.slang
             evalPdfBSDFWithV(rcVertexSd, rcSMI.value, -srcConnectionV, rcVertexWi, allowedSampledTypes2);
-            // rcMI.evalPdf(rcVertexSd, -srcConnectionV);  // **
 
         if (!isRcVertexNEE) dstPDF2 = dstRcVertexScatterPdf;
         else dstPDF2 = srcReservoir.lightPdf;
@@ -621,8 +630,7 @@ float3 computeShiftedIntegrandReconnection(const RestirPathTracerParams params, 
     float3 dstF2 = 1.f;
 
     if (!isRcVertexEscapedVertex) {
-        dstF2 = evalBSDFCosine(rcVertexSd, rcSMI.value, rcVertexWi, allowedSampledTypes2);
-        // dstF2 = rcMI.eval(rcVertexSd, rcVertexWi, sg);
+        dstF2 = evalBSDFCosine(sbsdfRC, wiLocalRC, woLocalRC, allowedSampledTypes2);
     }
 
 
@@ -777,46 +785,3 @@ bool traceVisibilityRay(const Ray ray)
     return sceneRayQuery.traceVisibilityRay(ray, RAY_FLAG_NONE, 0xff);
 }
 
-
-float evalPdfBSDF(const ShadingData sd, const StandardMaterialInstance mi, float3 wo, uint allowedSampledTypes = -1, bool allowDeltaEval = false)
-{
-    float3 wiLocal = mi.sf.toLocal(sd.V);
-    float3 woLocal = mi.sf.toLocal(wo);
-    StandardBSDF bsdf = StandardBSDF(wiLocal, sd.mtl, mi.data);
-
-    // return bsdf.evalPdf(wo, wi, allowedSampledFlags, allowDeltaEval);
-
-    float pdf = 0.f;
-    if ((allowedSampledTypes & uint(SampledBSDFFlags::DiffuseReflection)) && !allowDeltaEval && bsdf.pDiffuseReflection > 0.f)
-        pdf += bsdf.pDiffuseReflection * bsdf.diffuseReflection.evalPdf(wiLocal, woLocal);
-    if ((allowedSampledTypes & uint(SampledBSDFFlags::DiffuseTransmission)) && !allowDeltaEval && bsdf.pDiffuseTransmission > 0.f)
-        pdf += bsdf.pDiffuseTransmission * bsdf.diffuseTransmission.evalPdf(wiLocal, woLocal);
-    if ((allowedSampledTypes & uint(SampledBSDFFlags::SpecularReflection)) && bsdf.pSpecularReflection > 0.f)
-        pdf += bsdf.pSpecularReflection * bsdf.specularReflection.evalPdf(wiLocal, woLocal);
-    if ((allowedSampledTypes & uint(SampledBSDFFlags::SpecularTransmission)) && bsdf.pSpecularTransmission > 0.f)
-        pdf += bsdf.pSpecularTransmission * bsdf.specularTransmission.evalPdf(wiLocal, woLocal);
-
-    return pdf;
-}
-
-float evalPdfBSDFWithV(in ShadingData sd, const StandardMaterialInstance mi, float3 V, float3 wo, uint allowedSampledTypes = -1, bool allowDeltaEval = false)
-{
-    sd.V = V;
-    float3 wiLocal = mi.sf.toLocal(V);
-    float3 woLocal = mi.sf.toLocal(wo);
-    StandardBSDF bsdf = StandardBSDF(wiLocal, sd.mtl, mi.data);
-
-    // return bsdf.evalPdf(wo, wi, allowedSampledFlags, allowDeltaEval);
-    float pdf = 0.f;
-    if ((allowedSampledTypes & uint(SampledBSDFFlags::DiffuseReflection)) && !allowDeltaEval && bsdf.pDiffuseReflection > 0.f)
-        pdf += bsdf.pDiffuseReflection * bsdf.diffuseReflection.evalPdf(wiLocal, woLocal);
-    if ((allowedSampledTypes & uint(SampledBSDFFlags::DiffuseTransmission)) && !allowDeltaEval && bsdf.pDiffuseTransmission > 0.f)
-        pdf += bsdf.pDiffuseTransmission * bsdf.diffuseTransmission.evalPdf(wiLocal, woLocal);
-    if ((allowedSampledTypes & uint(SampledBSDFFlags::SpecularReflection)) && bsdf.pSpecularReflection > 0.f)
-        pdf += bsdf.pSpecularReflection * bsdf.specularReflection.evalPdf(wiLocal, woLocal);
-    if ((allowedSampledTypes & uint(SampledBSDFFlags::SpecularTransmission)) && bsdf.pSpecularTransmission > 0.f)
-        pdf += bsdf.pSpecularTransmission * bsdf.specularTransmission.evalPdf(wiLocal, woLocal);
-
-    return pdf;
-
-}

@@ -3,6 +3,7 @@ add_plugin(ReSTIRPTPass)
 target_sources(ReSTIRPTPass PRIVATE
     ComputePathReuseMISWeights.cs.slang
     GeneratePaths.cs.slang
+    Helpers.slang
     LoadShadingData.slang
     NRDHelpers.slang
     Params.slang
