@@ -6,7 +6,7 @@ def render_graph_PathTracer():
     g.addPass(PathTracer, "PathTracer")
     VBufferRT = createPass("VBufferRT")
     g.addPass(VBufferRT, "VBufferRT")
-    AccumulatePass = createPass("AccumulatePass", {'enabled': False, 'precisionMode': 'Single'})
+    AccumulatePass = createPass("AccumulatePass", {'enabled': False, 'precisionMode': 'Double'})
     g.addPass(AccumulatePass, "AccumulatePass")
     ToneMapper = createPass("ToneMapper", {'autoExposure': False, 'exposureCompensation': 0.0})
     g.addPass(ToneMapper, "ToneMapper")

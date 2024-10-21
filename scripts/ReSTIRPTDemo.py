@@ -42,7 +42,7 @@ def render_graph_ReSTIRPT():
     g.markOutput("ToneMapper.dst")
 
     # Besides tone-mapped final color, can check intermediate output
-    g.markOutput("RTXDIPass.color")
+    # g.markOutput("RTXDIPass.color")
 
     return g
 

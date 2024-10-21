@@ -32,6 +32,6 @@ docs/Nsight-files
 *.VC.opendb
 *.pyc
 *slang-dump-*
-*.mp4
+# *.mp4
 *.tlog
 *.bak
