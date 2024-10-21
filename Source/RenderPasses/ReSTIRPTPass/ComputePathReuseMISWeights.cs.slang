@@ -6,18 +6,13 @@
  # Copyright (c) 2024, Haoxuan Wang.  All rights reserved.
  **************************************************************************/
 
-import Params;
-import Shift;
-import Scene.HitInfo;
+import Rendering.Utils.PixelStats;
+import Utils.Debug.PixelDebug;
+import Utils.Sampling.TinyUniformSampleGenerator;
+import LoadShadingData;
 import PathReservoir;
 import PathTracer;
-import Scene.Scene;
-import Utils.Debug.PixelDebug;
-import Rendering.Utils.PixelStats;
-import Utils.Sampling.TinyUniformSampleGenerator;
-import Utils.Math.Ray;
-import Utils.Math.MathHelpers;
-import LoadShadingData;
+import Shift;
 
 // if we don't use PathSamplingMode::PathReuse, this pass is used for computing contribution MIS weights
 

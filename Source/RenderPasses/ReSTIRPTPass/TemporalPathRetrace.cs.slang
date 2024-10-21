@@ -6,17 +6,14 @@
  # Copyright (c) 2024, Haoxuan Wang.  All rights reserved.
  **************************************************************************/
 
-import Params;
+
+import Utils.Debug.PixelDebug;
+import Utils.Sampling.TinyUniformSampleGenerator;
+import Rendering.Utils.PixelStats;
+import LoadShadingData;
 import Shift;
-import Scene.HitInfo;
 import PathReservoir;
 import PathTracer;
-import Scene.Scene;
-import Utils.Debug.PixelDebug;
-import Rendering.Utils.PixelStats;
-import Utils.Sampling.TinyUniformSampleGenerator;
-import Utils.Math.Ray;
-import LoadShadingData;
 
 struct PathRetracePass
 {

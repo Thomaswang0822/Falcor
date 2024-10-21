@@ -10,8 +10,6 @@ import Scene.Raytracing;
 import Utils.Debug.PixelDebug;
 import Rendering.Utils.PixelStats;
 import PathTracer;
-import PathState;
-import Params;
 import PathReservoir;
 
 ParameterBlock<PathTracer> gPathTracer;

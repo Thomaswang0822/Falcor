@@ -25,14 +25,12 @@
  # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  **************************************************************************/
+
 import Rendering.Materials.IMaterialInstance;
 import Rendering.Materials.IsotropicGGX;
 import RenderPasses.Shared.Denoising.NRDBuffers;
 import RenderPasses.Shared.Denoising.NRDConstants;
 import RenderPasses.Shared.Denoising.NRDHelpers;
-import Scene.Scene;
-import Scene.ShadingData;
-import Utils.Math.MathHelpers;
 import PathState;
 
 void setNRDPrimaryHitEmission(NRDBuffers outputNRD, const bool useNRDDemodulation, const PathState path, const uint2 pixel, const bool isPrimaryHit, const float3 emission)

@@ -42,9 +42,7 @@
 #include "Utils/Sampling/SampleGenerator.h"
 #include "Rendering/Lights/LightBVHSampler.h"
 #include "Rendering/Lights/EmissiveLightSampler.h"
-#include "Rendering/Lights/EmissivePowerSampler.h"
 #include "Rendering/Lights/EnvMapSampler.h"
-#include "Rendering/Volumes/GridVolumeSampler.h"
 #include "Rendering/Materials/TexLODTypes.slang"
 #include "Rendering/Utils/PixelStats.h"
 

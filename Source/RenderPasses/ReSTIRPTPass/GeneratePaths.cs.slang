@@ -25,14 +25,10 @@
  # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  **************************************************************************/
-import Scene.Scene;
-import Utils.Attributes;
-import Utils.Color.ColorHelpers;
-import Rendering.Lights.EnvMapSampler;
+
 import LoadShadingData;
 import PathTracer;
 import PathState;
-import Params;
 import PathReservoir;
 
 // Shared memory variables.

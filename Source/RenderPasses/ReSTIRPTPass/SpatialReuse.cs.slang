@@ -6,22 +6,17 @@
  # Copyright (c) 2024, Haoxuan Wang.  All rights reserved.
  **************************************************************************/
 
-import Params;
-import Shift;
-import Scene.HitInfo;
-import PathReservoir;
-import PathTracer;
-import Scene.Scene;
 import Utils.Debug.PixelDebug;
-import Rendering.Utils.PixelStats;
 import Utils.Sampling.TinyUniformSampleGenerator;
-import Utils.Math.Ray;
-import Utils.Math.MathHelpers;
-import LoadShadingData;
+import Rendering.Utils.PixelStats;
 import RenderPasses.Shared.Denoising.NRDData;
 import RenderPasses.Shared.Denoising.NRDBuffers;
 import RenderPasses.Shared.Denoising.NRDConstants;
 import NRDHelpers;
+import LoadShadingData;
+import Shift;
+import PathReservoir;
+import PathTracer;
 
 struct PathReusePass
 {

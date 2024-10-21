@@ -38,6 +38,7 @@
 #include "RenderGraph/RenderPassHelpers.h"
 #include "RenderGraph/RenderPassStandardFlags.h"
 #include "Rendering/Lights/EmissiveUniformSampler.h"
+#include "Rendering/Lights/EmissivePowerSampler.h"
 
 namespace
 {

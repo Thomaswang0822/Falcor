@@ -57,7 +57,6 @@ const float ggxAlpha = bsdfProperties.roughness * bsdfProperties.roughness;
  */
 
 import Utils.Sampling.SampleGenerator;
-import Rendering.Materials.BSDFs.StandardBSDF;
 import Rendering.Materials.StandardMaterialInstance;
 
 /** The deprecated code is

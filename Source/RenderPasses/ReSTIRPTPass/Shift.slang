@@ -8,19 +8,17 @@
 
 #include "Utils/Math/MathConstants.slangh"
 
-import PathReservoir;
+
 import Utils.Sampling.SampleGenerator;
-import LoadShadingData;
-import Params;
 import Utils.Debug.PixelDebug;
-import Rendering.Utils.PixelStats;
-import Rendering.Materials.BSDFs.StandardBSDF;
 import Rendering.Materials.StandardMaterialInstance;
 import Scene.RaytracingInline;
-import Scene.Scene;
-import Helpers;
-import PathTracer;
 import RenderPasses.Shared.Denoising.NRDData;
+import LoadShadingData;
+import Helpers;
+import PathReservoir;
+import PathTracer;
+
 
 ParameterBlock<PathTracer> gPathTracer;
 

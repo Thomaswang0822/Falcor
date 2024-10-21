@@ -26,13 +26,11 @@
  # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  **************************************************************************/
 #include "Scene/SceneDefines.slangh"
-import Scene.Scene;
-__exported import Scene.HitInfo;
+//__exported import Scene.HitInfo;
 __exported import Scene.Shading;
-import Utils.Math.MathHelpers;
+import Utils.Debug.PixelDebug;
 import Rendering.Materials.TexLODHelpers;
 import Params;
-import Utils.Debug.PixelDebug;
 
 #define IS_SET(flags, type) ((flags) & (type))
 

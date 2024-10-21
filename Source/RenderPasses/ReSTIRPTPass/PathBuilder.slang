@@ -3,14 +3,11 @@
  **************************************************************************/
 // #include "Scene/Material/MaterialDefines.slangh"
 
-import LoadShadingData;
-import Utils.Debug.PixelDebug;
 import Utils.Math.HashUtils;
+import Utils.Sampling.TinyUniformSampleGenerator;
 import Params;
 import PathReservoir;
-import Rendering.Utils.PixelStats;
-import Scene.RaytracingInline;
-import Utils.Sampling.TinyUniformSampleGenerator;
+import LoadShadingData;
 
 #if BPR
 static const int kRcWiCount = 2;

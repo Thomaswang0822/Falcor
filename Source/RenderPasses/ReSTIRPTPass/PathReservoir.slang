@@ -2,15 +2,10 @@
  # Copyright (c) 2022, Daqi Lin.  All rights reserved.
  **************************************************************************/
 
-import LoadShadingData;
-import Utils.Debug.PixelDebug;
-import Utils.Geometry.GeometryHelpers;
 import Utils.Sampling.SampleGenerator;
 import Scene.HitInfoType;
-import Utils.Math.FormatConversion;
-import Utils.Math.Ray;
 import Params;
-import Utils.Math.PackedFormats;
+import LoadShadingData;
 
 #if BPR// path reuse
 static const int kRcAttrCount = 2;
