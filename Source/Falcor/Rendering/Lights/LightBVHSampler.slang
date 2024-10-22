@@ -144,6 +144,13 @@ struct LightBVHSampler : IEmissiveLightSampler
         return triangleSelectionPdf * trianglePdf;
     }
 
+    void skipRandomNumber<S : ISampleGenerator>(inout S sg)
+    {
+        if (gScene.lightCollection.isEmpty()) return;
+        sampleNext1D(sg);
+        sampleNext2D(sg);
+    }
+
 
     // Private
 

@@ -36,6 +36,8 @@ interface ISampleGenerator
      */
     [mutating]
     uint next();
+
+    uint getCurrentSeed();
 };
 
 /**

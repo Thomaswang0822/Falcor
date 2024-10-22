@@ -43,7 +43,7 @@ namespace Falcor
         const std::string kLightUpdaterShaderFile = "Rendering/RTXDI/LightUpdater.cs.slang";
         const std::string kEnvLightUpdaterShaderFile = "Rendering/RTXDI/EnvLightUpdater.cs.slang";
 
-        /** Config setting : Maximum number of unique screen-sized reservoir bufers needed by any
+        /** Config setting : Maximum number of unique screen-sized reservoir buffers needed by any
             RTXDI pipelines we create in this pass. Just controls memory allocation (not really perf).
         */
         const uint32_t kMaxReservoirs = 3;          ///< Number of reservoirs per pixel to allocate (and hence the max # used).
@@ -259,7 +259,7 @@ namespace Falcor
         presampleLights(pRenderContext);
 
         // Reservoir buffer containing reservoirs after sampling/resampling.
-        uint32_t outputReservoirID;
+        uint32_t outputReservoirID = 0u;
 
         switch (mOptions.mode)
         {
@@ -293,7 +293,8 @@ namespace Falcor
 
     void RTXDI::bindShaderDataInternal(const ShaderVar& rootVar, const ref<Texture>& pMotionVectors, bool bindScene)
     {
-        auto var = rootVar["gRTXDI"];
+        /// @see ShadeVar.h
+        ShaderVar var = rootVar["gRTXDI"];
 
         // Send our parameter structure down
         var["params"].setBlob(&mRTXDIShaderParams, sizeof(mRTXDIShaderParams));
@@ -482,7 +483,7 @@ namespace Falcor
         }
 
         // Update the light PDF texture mipmap chain if necessary.
-        if (mFlags.updateEmissiveLightsFlux | mFlags.updateAnalyticLightsFlux)
+        if (mFlags.updateEmissiveLightsFlux || mFlags.updateAnalyticLightsFlux)
         {
             mpLocalLightPdfTexture->generateMips(pRenderContext);
         }

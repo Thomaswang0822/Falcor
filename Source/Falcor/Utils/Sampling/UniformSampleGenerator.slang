@@ -76,5 +76,10 @@ export struct UniformSampleGenerator : ISampleGenerator
     [mutating]
     uint next() { return nextRandom(rng); }
 
+    uint getCurrentSeed()
+    {
+        return 0; // not usable
+    }
+
     Xoshiro128StarStar rng;
 };

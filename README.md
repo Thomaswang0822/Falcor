@@ -1,121 +1,93 @@
-![](docs/images/teaser.png)
+# ReSTIR Path Tracing (ReSTIR PT)
 
-# Falcor
+## Overview
 
-Falcor is a real-time rendering framework supporting DirectX 12 and Vulkan. It aims to improve productivity of research and prototype projects.
+This project implements the **ReSTIR Path Tracing (ReSTIR PT)** algorithm, a state-of-the-art technique designed to improve real-time global illumination in complex scenes with challenging (highly specular) materials. ReSTIR PT was originally proposed by Daqi Lin in his SIGGRAPH 2022 paper [*Generalized Resampled Importance Sampling: Foundations of ReSTIR*](https://dqlin.xyz/pubs/2022-sig-GRS/). Besides the original paper, my understanding, debugging, and README also heavily depend on the SIGGRAPH 2023 Course [A Gentle Introduction to ReSTIR](https://intro-to-restir.cwyman.org/).
 
-Features include:
-* Abstracting many common graphics operations, such as shader compilation, model loading, and scene rendering
-* Raytracing support
-* Python scripting support
-* Render graph system to build modular renderers
-* Common rendering techniques such post-processing effects
-* Unbiased path tracer
-* Integration of various RTX SDKs such as DLSS, RTXDI and NRD
+ReSTIR PT extends the [original ReSTIR](https://benedikt-bitterli.me/restir/) (Resampled Importance Sampling for Direct Illumination, also referred as ReSTIR DI) by enabling **full path tracing with spatiotemporal reuse**. While ReSTIR DI focuses on efficient resampling for direct illumination, ReSTIR PT adapts this resampling to full global illumination, including indirect bounces. It leverages the same core principles—resampling and reservoir-based spatiotemporal reuse—but extends them to handle multi-bounce paths efficiently.
 
-## Prerequisites
-- Windows 10 version 20H2 (October 2020 Update) or newer, OS build revision .789 or newer
-- Visual Studio 2022
-- [Windows 10 SDK (10.0.19041.0) for Windows 10, version 2004](https://developer.microsoft.com/en-us/windows/downloads/windows-10-sdk/)
-- A GPU which supports DirectX Raytracing, such as the NVIDIA Titan V or GeForce RTX
-- NVIDIA driver 466.11 or newer
+Thus, ReSTIR PT excels in real-time rendering by producing high-quality images even within a single frame.
 
-Optional:
-- Windows 10 Graphics Tools. To run DirectX 12 applications with the debug layer enabled, you must install this. There are two ways to install it:
-    - Click the Windows button and type `Optional Features`, in the window that opens click `Add a feature` and select `Graphics Tools`.
-    - Download an offline package from [here](https://docs.microsoft.com/en-us/windows-hardware/test/hlk/windows-hardware-lab-kit#supplemental-content-for-graphics-media-and-mean-time-between-failures-mtbf-tests). Choose a ZIP file that matches the OS version you are using (not the SDK version used for building Falcor). The ZIP includes a document which explains how to install the graphics tools.
-- NVAPI, CUDA, OptiX (see below)
+## About Falcor
 
-## Building Falcor
-Falcor uses the [CMake](https://cmake.org) build system. Additional information on how to use Falcor with CMake is available in the [CMake](docs/development/cmake.md) development documetation page.
+[**Falcor**](https://github.com/NVIDIAGameWorks/Falcor/) is a highly flexible and extensible real-time rendering framework developed by NVIDIA. It serves as the backbone for implementing modern rendering algorithms, including ray tracing and path tracing. This project utilizes Falcor’s capabilities to manage the rendering pipeline, shader compilation, and resource handling, enabling seamless experimentation with the ReSTIR PT algorithm.
 
-### Visual Studio
-If you are working with Visual Studio 2022, you can setup a native Visual Studio solution by running `setup_vs2022.bat` after cloning this repository. The solution files are written to `build/windows-vs2022` and the binary output is located in `build/windows-vs2022/bin`.
+## Rendering Results & Comparison
 
-### Visual Studio Code
-If you are working with Visual Studio Code, run `setup.bat` after cloning this repository. This will setup a VS Code workspace in the `.vscode` folder with sensible defaults (only if `.vscode` does not exist yet). When opening the project folder in VS Code, it will prompt to install recommended extensions. We recommend you do, but at least make sure that _CMake Tools_ is installed. To build Falcor, you can select the configure preset by executing the _CMake: Select Configure Preset_ action (Ctrl+Shift+P). Choose the _Windows Ninja/MSVC_ preset. Then simply hit _Build_ (or press F7) to build the project. The binary output is located in `build/windows-ninja-msvc/bin`.
+### Against Path Tracing in Equal Time
 
-Warning: Do not start VS Code from _Git Bash_, it will modify the `PATH` environment variable to an incompatible format, leading to issues with CMake.
+The following equal-time comparison demonstrates the effectiveness of ReSTIR PT: single-frame rendering quality better than that of multi-frame baseline path tracing (PT). ReSTIR PT renders at ~12 fps, while PT at ~106 fps.
 
-### Linux
-Falcor has experimental support for Ubuntu 22.04. To build Falcor on Linux, run `setup.sh` after cloning this repository. You also need to install some system library headers using:
+- left: baseline path tracing after 9 frames
+- middle: image shows ReSTIR PT's output in a single frame.
+- right: mid combined with denoising (OptiX denoiser)
 
-```
-sudo apt install xorg-dev libgtk-3-dev
-```
+<img src="docs/images/eqtimeComp.png" alt="eqtimeComp" width="2880"/>
 
-You can use the same instructions for building Falcor as described in the _Visual Studio Code_ section above, simply choose the _Linux/GCC_ preset.
+### Effectiveness of Spatial and Temporal Reuse
 
-### Configure Presets
-Falcor uses _CMake Presets_ store in `CMakePresets.json` to provide a set of commonly used build configurations. You can get the full list of available configure presets running `cmake --list-presets`:
+It has been well established that, temporal reuse alone gives a big performance upgrade, while spatial reuse along does not. Combined together is the fundamental of ReSTIR.
 
-```
-$ cmake --list-presets
-Available configure presets:
+top-left: single-frame PT; top-right: spatial reuse only; bottom left: temporal reuse only; bottom-right: ReSTIR PT
 
-  "windows-vs2022"           - Windows VS2022
-  "windows-ninja-msvc"       - Windows Ninja/MSVC
-  "linux-clang"              - Linux Ninja/Clang
-  "linux-gcc"                - Linux Ninja/GCC
-```
+<img src="docs/images/sptmp_2x2.png" alt="sptmp_2x2" width="1920"/>
 
-Use `cmake --preset <preset name>` to generate the build tree for a given preset. The build tree is written to the `build/<preset name>` folder and the binary output files are in `build/<preset name>/bin`.
+### Shifting Mapping Strategy Comparison
 
-An existing build tree can be compiled using `cmake --build build/<preset name>`.
+Shift mapping strategy is the key technical detail on how to merge with spatial and temporal neighbor reservoirs. For more info, see [Technical Details Section](#technical-details) below, the Course, and the original paper.
 
-## Falcor In Python
-For more information on how to use Falcor as a Python module see [Falcor In Python](docs/falcor-in-python.md).
+To summarize, random replay achieves good rendering quality, but are slow; reconnection shift is fast, but it fails on high specular materials, like the glass teapot in the scene. Hybrid shift combines these 2 ideas and achieve both good quality and speed.
 
-## Microsoft DirectX 12 Agility SDK
-Falcor uses the [Microsoft DirectX 12 Agility SDK](https://devblogs.microsoft.com/directx/directx12agility/) to get access to the latest DirectX 12 features. Applications can enable the Agility SDK by putting `FALCOR_EXPORT_D3D12_AGILITY_SDK` in the main `.cpp` file. `Mogwai`, `FalcorTest` and `RenderGraphEditor` have the Agility SDK enabled by default.
+Here is the FPS:
 
-## NVAPI
-To enable NVAPI support, head over to https://developer.nvidia.com/nvapi and download the latest version of NVAPI (this build is tested against version R535).
-Extract the content of the zip file into `external/packman/` and rename `R535-developer` to `nvapi`.
+- Reconnection: 22.8 fps, 43.9 ms
+- Hybrid: 12.2 fps, 81.8 ms
+- Random Replay: 6.4 fps, 154 ms
 
-## NSight Aftermath
-To enable NSight Aftermath support, head over to https://developer.nvidia.com/nsight-aftermath and download the latest version of Aftermath (this build is tested against version 2023.1).
-Extract the content of the zip file into `external/packman/aftermath`.
+And the obvious failure of reconnection shift on the left:
 
-## CUDA
-To enable CUDA support, download and install [CUDA 11.6.2](https://developer.nvidia.com/cuda-11-6-2-download-archive) or later and reconfigure the build.
+<img src="docs/images/shiftComp.png" alt="shiftComp" width="1920"/>
 
-See the `CudaInterop` sample application located in `Source/Samples/CudaInterop` for an example of how to use CUDA.
+## Converged Rendering Result
 
-## OptiX
-If you want to use Falcor's OptiX functionality (specifically the `OptixDenoiser` render pass) download the [OptiX SDK](https://developer.nvidia.com/designworks/optix/download) (Falcor is currently tested against OptiX version 7.3) After running the installer, link or copy the OptiX SDK folder into `external/packman/optix` (i.e., file `external/packman/optix/include/optix.h` should exist).
+There is one thing to keep in mind: ReSTIR PT rendering is slightly dimmer than the baseline path tracing. (But personally I prefer the dimmer one, anyone the same?)
 
-Note: You also need CUDA installed to compile the `OptixDenoiser` render pass, see above for details.
+<img src="docs/images/accComp.png" alt="accComp" width="1920"/>
 
-## NVIDIA RTX SDKs
-Falcor ships with the following NVIDIA RTX SDKs:
+## Technical Details
 
-- DLSS (https://github.com/NVIDIA/DLSS)
-- RTXDI (https://github.com/NVIDIAGameWorks/RTXDI)
-- NRD (https://github.com/NVIDIAGameWorks/RayTracingDenoiser)
+The implementation of **ReSTIR PT** involves a few core concepts that extend the principles of the original ReSTIR algorithm, adapting them to path tracing. Here are the key ideas:
 
-Note that these SDKs are not under the same license as Falcor, see [LICENSE.md](LICENSE.md) for details.
+1. **Resampled Importance Sampling (RIS)**:
+   - ReSTIR PT uses **Resampled Importance Sampling (RIS)** to select important light samples based on multiple importance sampling (MIS) weights. This technique blends samples from different distributions, such as the **BSDF** (Bidirectional Scattering Distribution Function) and **Next Event Estimation (NEE)**:
+    $$w_i = \frac{f(x_i)}{p(x_i)}$$
+    where $w_i$ is the MIS-adjusted weight, $f(w_i)$ is the contribution of the sample $x_i$, and $p(x_i)$ is its probability density.
 
-## Resources
-- [Falcor](https://github.com/NVIDIAGameWorks/Falcor): Falcor's GitHub page.
-- [Documentation](./docs/index.md): Additional information and tutorials.
-    - [Getting Started](./docs/getting-started.md)
-    - [Render Graph Tutorials](./docs/tutorials/index.md)
-- [Rendering Resources](https://benedikt-bitterli.me/resources) A collection of scenes loadable in Falcor (pbrt-v4 format).
-- [ORCA](https://developer.nvidia.com/orca): A collection of scenes and assets optimized for Falcor.
-- [Slang](https://github.com/shader-slang/slang): Falcor's shading language and compiler.
+2. **Spatiotemporal Reservoir Resampling**:
+   - ReSTIR DI introduces **spatiotemporal reuse** of reservoirs. These reservoirs at each pixel incorporate some information of primary-hit sample from both spatial neighbors and past frames. The reuse/resampling is completed or rejected based on some primary-hit info available in G-buffer.
+   - ReSTIR PT extends it to a path reservoir that stores more information about the full path. A more sophisticated path reuse framework, shift mapping (see below), and 3 shifting mapping strategies enable correct and efficient reservoir resampling in path space. These adaptations allow ReSTIR PT to effectively handle path tracing, leveraging previous information to enhance sample efficiency and reduce variance over time:
+     $$R = \frac{\sum_{i=1}^N w_i}{\sum_{j=1}^M w_j}$$
+     where $R$ represents the reservoir resampling ratio, aggregating weights from $N$ (usually 1) candidates and adjusting with historical samples from $M$ reservoirs.
 
-## Citation
-If you use Falcor in a research project leading to a publication, please cite the project.
-The BibTex entry is
+3. **Reusing Samples Between Domains**:
 
-```bibtex
-@Misc{Kallweit22,
-   author =      {Simon Kallweit and Petrik Clarberg and Craig Kolb and Tom{'a}{\v s} Davidovi{\v c} and Kai-Hwa Yao and Theresa Foley and Yong He and Lifan Wu and Lucy Chen and Tomas Akenine-M{\"o}ller and Chris Wyman and Cyril Crassin and Nir Benty},
-   title =       {The {Falcor} Rendering Framework},
-   year =        {2022},
-   month =       {8},
-   url =         {https://github.com/NVIDIAGameWorks/Falcor},
-   note =        {\url{https://github.com/NVIDIAGameWorks/Falcor}}
-}
-```
+There are 3 main shift mapping strategies available in the renderer. to ensure efficient reuse of samples across different domains:
+
+- **Reconnection Shift**: This strategy maps a path to another neighbor path, reconnecting the deterministic beginning (camera position x0 and primary hit x1) to the same secondary vertex x2. It works well for diffuse
+and rough surfaces, but not for glossy or specular surfaces, as it does not
+respect the law of ideal reflection.
+- **Random Number Replay**: copies the base path’s
+random numbers at each bounce to re-trace the next bounce with the
+method used by the base path. It usually makes decisions similar to
+copying the half-vector or direction (depending on the BSDF type),
+or a light source’s position in the case of next-event-estimation.
+- **Hybrid Shift**: The hybrid shift combines the benefits of both and only requires constant additional storage per pixel – only a reconnection vertex and a random-number generating seed.
+
+***Other implementation details can be found from the course note and the original paper.***
+
+## Reference List
+
+- "Falcor: A Real-Time Rendering Framework," NVIDIA Research. [Falcor GitHub](https://github.com/NVIDIAGameWorks/Falcor)
+- Daqi Lin*, Markus Kettunen*, Benedikt Bitterli, Jacopo Pantaleoni, Cem Yuksel, and Chris Wyman. 2022. Generalized Resampled Importance Sampling: Foundations of ReSTIR. ACM Transactions on Graphics (Proceedings of SIGGRAPH 2022) 41, 4 (July 2022), 75:1-75:23. DOI:https://doi.org/10.1145/3528223.3530158
+- Chris Wyman, Markus Kettunen, Daqi Lin, Benedikt Bitterli, Cem Yuksel, Wojciech Jarosz, Pawel Kozlowski, and Giovanni De Francesco. 2023. A Gentle Introduction to ReSTIR: Path Reuse in Real-time. In ACM SIGGRAPH 2023 Courses, Los Angeles, California. DOI:https://doi.org/10.1145/3587423.3595511
+- Benedikt Bitterli, Chris Wyman, Matt Pharr, Peter Shirley, Aaron Lefohn, and Wojciech Jarosz. 2020. Spatiotemporal reservoir resampling for real-time ray tracing with dynamic direct lighting. ACM Transactions on Graphics (Proceedings of SIGGRAPH) 39, 4 (July 2020). DOI:https://doi.org/10/gg8xc7

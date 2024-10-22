@@ -18,6 +18,11 @@
 
 # User files.
 /CMakeUserPresets.json
+/CMakeFiles
+/git_version
+/git_version_state
+/CMakeCache.txt
+docs/Nsight-files
 
 # File types.
 *.user
@@ -27,6 +32,6 @@
 *.VC.opendb
 *.pyc
 *slang-dump-*
-*.mp4
+# *.mp4
 *.tlog
 *.bak

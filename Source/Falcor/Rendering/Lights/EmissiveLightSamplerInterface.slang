@@ -86,4 +86,9 @@ interface IEmissiveLightSampler
         \return Probability density with respect to solid angle at the shading point.
     */
     float evalPdf(const float3 posW, const float3 normalW, const bool upperHemisphere, const TriangleLightHit hit);
+
+    /** Skip random numbers, whose quantity aligns with random numbers used in sample() function.
+        \param[in,out] sg Sample generator.
+    */
+    void skipRandomNumber<S : ISampleGenerator>(inout S sg);
 };

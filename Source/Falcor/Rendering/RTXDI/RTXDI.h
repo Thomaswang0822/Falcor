@@ -373,7 +373,7 @@ namespace Falcor
         ref<ComputePass>  mpTemporalResamplingPass;                 ///< Temporal only resampling.
         ref<ComputePass>  mpSpatiotemporalResamplingPass;           ///< Spatiotemporal resampling.
 
-        // Compute pass launches.
+        // Compute pass launches, called in RTXDI::update().
 
         void bindShaderDataInternal(const ShaderVar& rootVar, const ref<Texture>& pMotionVectors, bool bindScene = true);
         void updateLights(RenderContext* pRenderContext);

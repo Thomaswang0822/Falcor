@@ -1,0 +1,6 @@
+@echo off
+call scripts\windows-bat-runs\common-vars.bat
+SET launch_name=RTXDI
+echo Current run is %launch_name%
+
+%bin_path%\Debug\Mogwai.exe --script=%script_path%\RTXDI.py --scene=%scene_path%\VeachAjar\VeachAjar.pyscene
