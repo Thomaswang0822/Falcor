@@ -1,5 +1,7 @@
 # ReSTIR Path Tracing (ReSTIR PT)
 
+<img src="docs/images/ReSTIR-teaser.jpg" alt="ReSTIR" width="1920"/>
+
 ## Overview
 
 This project implements the **ReSTIR Path Tracing (ReSTIR PT)** algorithm, a state-of-the-art technique designed to improve real-time global illumination in complex scenes with challenging (highly specular) materials. ReSTIR PT was originally proposed by Daqi Lin in his SIGGRAPH 2022 paper [*Generalized Resampled Importance Sampling: Foundations of ReSTIR*](https://dqlin.xyz/pubs/2022-sig-GRS/). Besides the original paper, my understanding, debugging, and README also heavily depend on the SIGGRAPH 2023 Course [A Gentle Introduction to ReSTIR](https://intro-to-restir.cwyman.org/).
@@ -76,12 +78,14 @@ There are 3 main shift mapping strategies available in the renderer. to ensure e
 - **Reconnection Shift**: This strategy maps a path to another neighbor path, reconnecting the deterministic beginning (camera position x0 and primary hit x1) to the same secondary vertex x2. It works well for diffuse
 and rough surfaces, but not for glossy or specular surfaces, as it does not
 respect the law of ideal reflection.
-- **Random Number Replay**: copies the base path’s
+- **Random Number Replay**: copies the base path's
 random numbers at each bounce to re-trace the next bounce with the
 method used by the base path. It usually makes decisions similar to
 copying the half-vector or direction (depending on the BSDF type),
-or a light source’s position in the case of next-event-estimation.
-- **Hybrid Shift**: The hybrid shift combines the benefits of both and only requires constant additional storage per pixel – only a reconnection vertex and a random-number generating seed.
+or a light source's position in the case of next-event-estimation.
+- **Hybrid Shift**: The hybrid shift combines the benefits of both and only requires constant additional storage per pixel - only a reconnection vertex and a random-number generating seed.
+
+<img src="docs/images/hybrid.jpg" alt="hybrid" width="960"/>
 
 ***Other implementation details can be found from the course note and the original paper.***
 
